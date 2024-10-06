@@ -1,0 +1,17 @@
+is_
+
+# Define the directory path for the data files
+SpDust_data_dir: '/Users/user/SPDUST.2.01/Data_Files/'
+
+environment:
+  nh: 30
+  T: 100 
+  Chi: 1
+  xh: 1e-3
+  xC: 3e-4
+  y: 1e-1
+  gamma: 0
+  dipole: 9.3
+  line: 7
+  tumbling: true
+  
