@@ -1,5 +1,5 @@
 from spdust.grain_properties import acx, asurf
-from charge_dist import refr_indices, Jpeisrf, hnu_pdt, hnu_pet, Y, Qabs, sigma_pdt, nu_uisrf, E_min
+from spdust.charge_dist import refr_indices, hnu_pdt, hnu_pet, Y, Qabs, sigma_pdt, nu_uisrf, E_min, JPEisrf
 from utils.util import DX_over_X, makelogtab, cgsconst
 import numpy as np
 
@@ -66,10 +66,9 @@ def FGpeZ(env, a, Z):
     asurf_val = asurf(a)  
 
     # Get Jpeisrf 
-    Jpeisrf_val = Jpeisrf(a)
-    
-    Jpepos = Chi * Jpeisrf_val['Jpepos']
-    Jpeneg = Chi * Jpeisrf_val['Jpeneg']
+    aux1, aux2 = JPEisrf(a)
+    Jpepos = Chi * aux1
+    Jpeneg = Chi * aux2
 
     # --- Gpe ---
     hnu_pet_val = max(1e-5, hnu_pet(Z, a)) 
@@ -88,7 +87,7 @@ def FGpeZ(env, a, Z):
         E_high = (hnu_pet_tab - hnu_pet_val) * eV
         Epe = 0.5 * E_high * (E_high - 2 * E_low) / (E_high - 3 * E_low)  # In erg
         second_term = 0
-        third_term = Jpepos[Z] * (Z + 1) * q**2 / asurf_val
+        third_term = Jpepos[int(Z)] * (Z + 1) * q**2 / asurf_val
     else:
         E_min_val = E_min(Z, a)  # Assuming `E_min` is a function
         E_low = E_min_val * eV
@@ -96,7 +95,7 @@ def FGpeZ(env, a, Z):
         Epe = 0.5 * (E_high + E_low)  # In erg
         second_term = Dnu_over_nu_pdt * np.sum(sigma_pdt(hnu_pdt_tab, Z, a) * nu_uisrf(hnu_pdt_tab) / eV / hnu_pdt_tab 
                                                * (hnu_pdt_tab - hnu_pdt_val + E_min_val))
-        third_term = Jpeneg[-Z] * (Z + 1) * q**2 / asurf_val
+        third_term = Jpeneg[int(-Z)] * (Z + 1) * q**2 / asurf_val
 
     first_term = c * np.pi * a**2 * Dnu_over_nu_pet * np.sum(Ytab * Qtab * nu_uisrf(hnu_pet_tab) / eV / hnu_pet_tab * Epe)
 
@@ -104,9 +103,9 @@ def FGpeZ(env, a, Z):
 
     # --- Fpe ---
     if Z >= 0:
-        Jpe = Jpepos[Z]
+        Jpe = Jpepos[int(Z)]
     else:
-        Jpe = Jpeneg[-Z]
+        Jpe = Jpeneg[int(-Z)]
 
     Fpe = me / mp * Jpe / (2 * np.pi * asurf_val**2 * nh * np.sqrt(2 * k * T / (np.pi * mp)))
 

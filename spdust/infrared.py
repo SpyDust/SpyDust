@@ -5,10 +5,10 @@
 # to compute the infrared spectrum.
 
 import numpy as np
-from utils.util import *
-from spdust.grain_properties import *
-from charge_dist import Qabs, nu_uisrf, Qabstabs
-from core.compile_spydust import SpDust_data_dir
+from spdust import SpDust_data_dir
+from utils.util import maketab, DX_over_X, cgsconst, makelogtab
+from spdust.grain_properties import N_C, N_H, Inertia, acx, grainparams
+from spdust.charge_dist import Qabs, nu_uisrf, Qabstabs
 from numba import jit, njit
 import os
 from utils.mpiutil import *
@@ -33,6 +33,7 @@ class IR_arrays:
 Theta_op = 863.0  # Debye temperature for out-of-plane C-C modes
 Theta_ip = 2504.0  # Debye temperature for in-plane C-C modes
 k = cgsconst.k
+mp = cgsconst.mp
 h = cgsconst.h
 c = cgsconst.c
 eV = cgsconst.eV

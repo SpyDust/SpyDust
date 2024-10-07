@@ -1,11 +1,12 @@
-from core.compile_spydust import SpDust_data_dir
+from spdust import SpDust_data_dir
 from utils.util import cgsconst, makelogtab, DX_over_X
-from charge_dist import Qabs, nu_uisrf
-from spdust.infrared import Temp, Energy_modes, IR_arrays
 from spdust.grain_properties import grainparams, N_C, acx
+from spdust.charge_dist import Qabs, nu_uisrf
+from spdust.infrared import Temp, Energy_modes, IR_arrays
+
 import numpy as np
 from scipy.special import erf
-from numba import jit, njit
+from numba import jit
 import os
 
 
@@ -183,10 +184,10 @@ def Tev_effective(env, a, get_info=False):
     Chi = env['Chi']
 
     # Generate the necessary arrays
-    hnu_tab_vals = makelogtab(1e-2, 13.6, 500)  # Assuming `makelogtab` is defined
-    Dnu_over_nu = DX_over_X(1e-2, 13.6, 500)  # Assuming `DX_over_X` is defined
-    Qabs_vals = Qabs(a, 1, hnu_tab_vals)  # Assuming `Qabs` is defined
-    nu_uisrf_vals = nu_uisrf(hnu_tab_vals)  # Assuming `nu_uisrf` is defined
+    hnu_tab_vals = makelogtab(1e-2, 13.6, 500)  
+    Dnu_over_nu = DX_over_X(1e-2, 13.6, 500) 
+    Qabs_vals = Qabs(a, 1, hnu_tab_vals)  
+    nu_uisrf_vals = nu_uisrf(hnu_tab_vals)  
 
     # Calculate the ratio of collision rate to absorption rate
     ratio = nh * np.sqrt(8 * k * T / (pi * mp)) / (
@@ -195,7 +196,7 @@ def Tev_effective(env, a, get_info=False):
 
     # Number of sites (Nsites)
     if a < a2:
-        Nsites = N_C(a)  # Assuming `N_C` is defined
+        Nsites = N_C(a)  
     else:
         Nsites = N_C(a) * 3 * d / a
 
@@ -205,7 +206,7 @@ def Tev_effective(env, a, get_info=False):
 
     # Determine the effective temperature
     if Nsites > ratio:
-        Tev = Tev_interpol(a, Chi)  # Assuming `Tev_interpol` is defined
+        Tev = Tev_interpol(a, Chi)  
     else:
         Tev = T  # No more sticking collisions, atoms bounce back
 
@@ -238,7 +239,7 @@ def FGn(env, a, T_ev, Zg_tab, tumbling=True):
     Tval = env['T']
     xh = env['xh']
     y = env['y']
-    acx_val = acx(a)  # Assuming `acx` is defined elsewhere
+    acx_val = acx(a)  
 
     # Calculate e_n and e_e
     e_n = np.sqrt(q**2 / (2 * acx_val**4 * k * Tval) * Zg_tab**2)

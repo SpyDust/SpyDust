@@ -8,9 +8,9 @@
 
 
 import numpy as np
-from utils.util import *
 from spdust import SpDust_data_dir  
-from spdust.grain_properties import *
+from utils.util import cgsconst, makelogtab, DX_over_X, biinterp_func, coord_grid
+from spdust.grain_properties import asurf, N_C
 from scipy.interpolate import interp1d    
 import os      
 from numba import njit, jit
@@ -366,7 +366,7 @@ def sigma_pdt(hnu_tab_aux, Z, a):
 
 # First term in eq (25) for the standard interstellar radiation field (31)
 
-@jit
+
 def first_term(Z, a):
     hnu_min = max([1e-5, hnu_pet(Z, a)])
     hnu_max = 13.6
@@ -409,7 +409,6 @@ def second_term(Z, a):
     return c * np.sum(sigmatab * utab / (hnu * eV)) * Dnu_over_nu
 
 # Equation (21)
-@jit
 def Jpe(Z, a):
     return first_term(Z, a) + second_term(Z, a)
 
@@ -479,11 +478,10 @@ def JPEisrf_calc(filename='jpeisrf_data.npz'):
     jpe_arrays.Jpe_pos_isrf = Jpe_pos_isrf
     jpe_arrays.Jpe_neg_isrf = Jpe_neg_isrf
 
-    return
+    return a_values, Jpe_pos_isrf, Jpe_neg_isrf
 
 # Call the function
-JPEisrf_calc()
-a_values, Jpe_pos_isrf, Jpe_neg_isrf = jpe_arrays.a_values, jpe_arrays.Jpe_pos_isrf, jpe_arrays.Jpe_neg_isrf
+a_values, Jpe_pos_isrf, Jpe_neg_isrf = JPEisrf_calc()
 
 
 # Function to interpolate Jpe arrays

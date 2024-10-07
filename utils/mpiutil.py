@@ -170,6 +170,9 @@ def parallel_jobs_no_gather_no_return(func, glist, method="con", comm=_comm):
     return None
 
 def barrier(comm=_comm):
+    """
+    Synchronize all MPI processes.
+    """
     if comm is not None and comm.size > 1:
         comm.Barrier()
 

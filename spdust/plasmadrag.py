@@ -1,10 +1,14 @@
 import numpy as np
-from utils.util import cgsconst, makelogtab, maketab, DX_over_X
-from numba import jit, njit
 from scipy.special import kv as beselk
-from core.compile_spydust import SpDust_data_dir
-import os
+
+from spdust import SpDust_data_dir
+from utils.util import cgsconst, makelogtab, maketab, DX_over_X
 from spdust.grain_properties import acx
+
+from numba import jit
+import os
+from utils.mpiutil import *
+
 
 k = cgsconst.k
 c = cgsconst.c
@@ -44,7 +48,6 @@ class gp_arrays:
     gp_pos, gp_neg, gp_neutral = None, None, None
 
 
-@jit(nopython=True)
 def compute_small_e():
     
     # Create arrays
@@ -74,6 +77,7 @@ def compute_small_e():
     fsin = u / (u ** 2 + 1) ** 2
     
     # Main computation loop
+    """
     for ig in range(Ngamma):
         Gamma = Gamma_tab[ig]
         time = Gamma * (u + u ** 3 / 3)
@@ -83,19 +87,35 @@ def compute_small_e():
         intsin = 16 * np.sum(np.imag(np.exp(I * time) * fsin * Du)) ** 2
         
         # Store results in smalle_tab
-        smalle_tab[ig] = intcos + intsin
+        smalle_tab[ig] = intcos + intsin    
+    """
+
+    # Define function for parallel computation
+    def compute_small_e_parallel(ig):
+        Gamma = Gamma_tab[ig]
+        time = Gamma * (u + u ** 3 / 3)
+        
+        # Integrals
+        intcos = 4 * np.sum(np.real(np.exp(I * time) * fcos * Du)) ** 2
+        intsin = 16 * np.sum(np.imag(np.exp(I * time) * fsin * Du)) ** 2
+        
+        return intcos + intsin
+    
+    # Parallel computation
+    smalle_tab = np.array(parallel_map(compute_small_e_parallel, list(range(Ngamma))))
     
     # Output the maximum gamma for debugging purposes
     gamma_max = np.max(Gamma_tab)
     
-    smalletabs.Gamma_tab = Gamma_tab
-    smalletabs.smalle_tab = smalle_tab
-    smalletabs.Gamma_max = gamma_max
-    print("I(Zg<0, parabolic) stored")
-    
     return Gamma_tab, smalle_tab, gamma_max
 
-#compute_small_e()
+# Call `compute_small_e` to get the values for small e_1, Zg < 0
+Gamma_tab, smalle_tab, Gamma_max = compute_small_e()
+smalletabs.Gamma_tab = Gamma_tab
+smalletabs.smalle_tab = smalle_tab
+smalletabs.Gamma_max = Gamma_max
+if rank0:
+    print("I(Zg<0, parabolic) stored")
 
 @jit(nopython=True)
 def replace_zeros(Ipos_tab):
@@ -110,13 +130,20 @@ def replace_zeros(Ipos_tab):
 
     return Ipos_tab
 
-@jit(nopython=False)
 def compute_int_plasma():
-
-    # Call `compute_small_e` to get the values for small e_1, Zg < 0
-    Gamma_tab, smalle_tab, Gamma_max = compute_small_e()
-
-
+    file_path = os.path.join(SpDust_data_dir, 'int_plasma.npz')
+    if os.path.exists(file_path):
+        data = np.load(file_path)
+        Ipos_tab = data['Ipos_tab']
+        Ineg_tab = data['Ineg_tab']
+        rot_tab = data['rot_tab']
+        e_1tab = data['e_1tab']
+        rot_min = data['rot_min']
+        rot_max = data['rot_max']
+        e_1min = data['e_1min']
+        e_1max = data['e_1max']
+        return Ipos_tab, Ineg_tab, rot_tab, e_1tab, rot_min, rot_max, e_1min, e_1max
+    
     # Create arrays
     e_1min = 1e-15
     e_1max = 1e4
@@ -143,10 +170,11 @@ def compute_int_plasma():
     y[Ny:] = makelogtab(ymed, ymax, Ny)
 
     # Zg > 0 case
-    Dz = -I * np.concatenate((ymed / Ny + np.zeros(Ny), DX_over_X(ymed, ymax, Ny) * makelogtab(ymed, ymax, Ny)))
+    Dz1 = -I * np.concatenate((ymed / Ny + np.zeros(Ny), DX_over_X(ymed, ymax, Ny) * makelogtab(ymed, ymax, Ny)))
     log = 0.5 * np.log(1.0 + 4.0 / y**2) + I * np.arctan(2.0 / y)
     z = 1.0 - I * y
 
+    '''
     for ie in range(Ne_1):
         e_1 = e_1tab[ie]
         Aval = e_1 / (e_1 + 2.0)
@@ -155,19 +183,40 @@ def compute_int_plasma():
         fsin = z / (z**2 + Aval)**2
         for ir in range(Nrot):
             rot = rot_tab[ir]
-            intcos = 4.0 * Aval * np.sum(np.real(np.exp(I * rot * time) * fcos * Dz))**2
-            intsin = 16.0 * Aval**2 * np.sum(np.imag(np.exp(I * rot * time) * fsin * Dz))**2
+            intcos = 4.0 * Aval * np.sum(np.real(np.exp(I * rot * time) * fcos * Dz1))**2
+            intsin = 16.0 * Aval**2 * np.sum(np.imag(np.exp(I * rot * time) * fsin * Dz1))**2
             Ipos_tab[ir, ie] = intcos + intsin
+    '''
+
+    # Define function for parallel computation
+    @jit(nopython=True)
+    def loop(ie):
+        e_1 = e_1tab[ie]
+        Aval = e_1 / (e_1 + 2.0)
+        time = 1.0 / np.sqrt(e_1 * (e_1 + 2.0)) * (log + 2.0 * (e_1 + 1.0) * z / (z**2 - 1.0))
+        fcos = (z**2 - Aval) / (z**2 + Aval)**2
+        fsin = z / (z**2 + Aval)**2
+        result = np.zeros(Nrot)
+        for ir in range(Nrot):
+            rot = rot_tab[ir]
+            intcos = 4.0 * Aval * np.sum(np.real(np.exp(I * rot * time) * fcos * Dz1))**2
+            intsin = 16.0 * Aval**2 * np.sum(np.imag(np.exp(I * rot * time) * fsin * Dz1))**2
+            result[ir] = intcos + intsin
+        return result
+    
+    # Parallel computation
+    Ipos_tab = np.array(parallel_map(loop, list(range(Ne_1)))).T
 
     # Handling small e_1 and high rotation for Zg < 0
     inde = np.where(e_1tab < e_1small)[0][-1]
     indrot = np.where(rot_tab < rot_small)[0][-1]
 
     # Zg < 0 non-small e_1
-    Dz = np.exp(I * pi / 4.0) * np.concatenate((ymed / Ny + np.zeros(Ny), DX_over_X(ymed, ymax, Ny) * makelogtab(ymed, ymax, Ny)))
+    Dz2 = np.exp(I * pi / 4.0) * np.concatenate((ymed / Ny + np.zeros(Ny), DX_over_X(ymed, ymax, Ny) * makelogtab(ymed, ymax, Ny)))
     log = 0.5 * np.log(1.0 + 4.0 / y**2 + 2.0 * np.sqrt(2.0) / y) - I * np.arctan(np.sqrt(2.0) / (np.sqrt(2.0) + y))
     z = 1.0 + np.exp(I * pi / 4.0) * y
 
+    '''
     for ie in range(Ne_1):
         e_1 = e_1tab[ie]
         Aval = e_1 / (e_1 + 2.0)
@@ -176,11 +225,33 @@ def compute_int_plasma():
         fsin = z / (1.0 + Aval * z**2)**2
         for ir in range(indrot):
             rot = rot_tab[ir]
-            intcos = 4.0 * Aval * np.sum(np.real(np.exp(I * rot * time) * fcos * Dz))**2
-            intsin = 16.0 * Aval**2 * np.sum(np.imag(np.exp(I * rot * time) * fsin * Dz))**2
+            intcos = 4.0 * Aval * np.sum(np.real(np.exp(I * rot * time) * fcos * Dz2))**2
+            intsin = 16.0 * Aval**2 * np.sum(np.imag(np.exp(I * rot * time) * fsin * Dz2))**2
             Ineg_tab[ir, ie] = intcos + intsin
+    '''
+
+    # Define function for parallel computation
+    @jit(nopython=True)
+    def loop(ie):
+        e_1 = e_1tab[ie]
+        Aval = e_1 / (e_1 + 2.0)
+        time = 1.0 / np.sqrt(e_1 * (e_1 + 2.0)) * (log - 2.0 * (e_1 + 1.0) * z / (z**2 - 1.0))
+        fcos = (1.0 - Aval * z**2) / (1.0 + Aval * z**2)**2
+        fsin = z / (1.0 + Aval * z**2)**2
+        result = np.zeros(indrot)
+        for ir in range(indrot):
+            rot = rot_tab[ir]
+            intcos = 4.0 * Aval * np.sum(np.real(np.exp(I * rot * time) * fcos * Dz2))**2
+            intsin = 16.0 * Aval**2 * np.sum(np.imag(np.exp(I * rot * time) * fsin * Dz2))**2
+            result[ir] = intcos + intsin
+        return result
+    
+    # Parallel computation
+    Ineg_tab[:indrot,:] = np.array(parallel_map(loop, list(range(Ne_1)))).T
+    
 
     # Extending Zg < 0 for nearly parabolic case
+    '''
     for ie in range(inde):
         e_1 = e_1tab[ie]
         for ir in range(indrot, Nrot):
@@ -188,6 +259,24 @@ def compute_int_plasma():
             Gamma = rot * e_1
             if Gamma < Gamma_max:
                 Ineg_tab[ir, ie] = np.interp(Gamma, Gamma_tab, smalle_tab)
+    '''
+
+    # Define function for parallel computation
+    @jit(nopython=True)
+    def loop(ie):
+        e_1 = e_1tab[ie]
+        result = np.zeros(Nrot)
+        for ir in range(indrot, Nrot):
+            rot = rot_tab[ir]
+            Gamma = rot * e_1
+            if Gamma < Gamma_max:
+                result[ir] = np.interp(Gamma, Gamma_tab, smalle_tab)
+        return result
+    
+    # Parallel computation
+    if Nrot > indrot:
+        result = np.array(parallel_map(loop, list(range(inde)))).T
+        Ineg_tab[indrot:, :inde] = result[indrot:, :]
 
     # Some useful things for further interpolation
     rot_min = np.min(rot_tab)
@@ -199,122 +288,30 @@ def compute_int_plasma():
     Ipos_tab = replace_zeros(Ipos_tab)
     Ineg_tab = replace_zeros(Ineg_tab)
 
+    # Save the arrays to file
+    if rank0:
+        np.savez(file_path, Ipos_tab=Ipos_tab, Ineg_tab=Ineg_tab, rot_tab=rot_tab, e_1tab=e_1tab,
+             rot_min=rot_min, rot_max=rot_max, e_1min=e_1min, e_1max=e_1max)
+
+    return Ipos_tab, Ineg_tab, rot_tab, e_1tab, rot_min, rot_max, e_1min, e_1max
+
+
+
+Ipos_tab, Ineg_tab, rot_tab, e_1tab, rot_min, rot_max, e_1min, e_1max = compute_int_plasma()
+
+plasma_tabs.Ipos_tab = Ipos_tab
+plasma_tabs.Ineg_tab = Ineg_tab
+plasma_tabs.rot_tab = rot_tab
+plasma_tabs.e_1tab = e_1tab
+plasma_tabs.rot_min = rot_min
+plasma_tabs.rot_max = rot_max
+plasma_tabs.e_1min = e_1min
+plasma_tabs.e_1max = e_1max
+if rank0:
     print('I(rot, e, Zg <> 0) stored')
 
-    plasma_tabs.Ipos_tab = Ipos_tab
-    plasma_tabs.Ineg_tab = Ineg_tab
-    plasma_tabs.rot_tab = rot_tab
-    plasma_tabs.e_1tab = e_1tab
-    plasma_tabs.rot_min = rot_min
-    plasma_tabs.rot_max = rot_max
-    plasma_tabs.e_1min = e_1min
-    plasma_tabs.e_1max = e_1max
+barrier()
 
-    return 
-
-# Example usage
-# Ipos_tab, Ineg_tab, rot_min, rot_max, e_1min, e_1max = compute_int_plasma()
-
-'''
-@jit(nopython=True)
-def compute_int_plasma_2():
-
-    # Call `compute_small_e` to get the values for small e_1, Zg < 0
-    Gamma_tab, smalle_tab, Gamma_max = compute_small_e()
-
-    # Create arrays
-    e_1min = 1e-15
-    e_1max = 1e4
-    Ne_1 = 100
-    rot_min = 1e-7
-    rot_max = 1.0 / e_1min * Gamma_max
-    Nrot = 100
-
-
-    e_1small = 1e-2
-    rot_small = 1e3
-
-    rot_tab = makelogtab(rot_min, rot_max, Nrot)
-    e_1tab = makelogtab(e_1min, e_1max, Ne_1)
-    Ipos_tab = np.zeros((Nrot, Ne_1))
-    Ineg_tab = np.zeros((Nrot, Ne_1))
-
-    # Parameters
-    Ny = 10000
-    ymax = 1e50
-    ymed = 800.0
-
-
-    y_log =  makelogtab(ymed, ymax, Ny)
-
-    y = np.concatenate((maketab(0, ymed, Ny), y_log))
-
-    # Zg > 0 case
-    Dz = -I * np.concatenate((ymed / Ny + np.zeros(Ny), DX_over_X(ymed, ymax, Ny) * y_log))
-
-    atan_y = np.arctan(2.0 / y)
-    log_1 = 0.5 * np.log(1.0 + 4.0 / y**2) + I * atan_y
-    z = 1.0 - I * y
-
-    # Vectorize as much as possible
-    for ie in range(Ne_1):
-        e_1 = e_1tab[ie]
-        A = e_1 / (e_1 + 2.0)
-        time = 1.0 / np.sqrt(e_1 * (e_1 + 2.0)) * (log_1 + 2.0 * (e_1 + 1.0) * z / (z**2 - 1.0))
-        fcos = (z**2 - A) / (z**2 + A)**2
-        fsin = z / (z**2 + A)**2
-
-        # Vectorized computation for all rot values at once
-        rot_exp = np.exp(I * np.outer(rot_tab, time)) * Dz[np.newaxis, :]
-        real_part = np.sum( np.real(rot_exp * fcos[np.newaxis, :] ) )
-        imag_part = np.sum( np.imag(rot_exp * fsin[np.newaxis, :]) )
-
-        Ipos_tab[:, ie] = 4.0 * A * real_part**2 + 16.0 * A**2 * imag_part**2
-
-    # Handle Zg < 0 non-small e_1 (precompute to avoid nested loops)
-    Dz_neg = np.exp(I * pi / 4.0) * np.concatenate((ymed / Ny + np.zeros(Ny), DX_over_X(ymed, ymax, Ny) * y_log))
-    atan_y_neg = np.arctan(np.sqrt(2.0) / (np.sqrt(2.0) + y))
-    log_2 = 0.5 * np.log(1.0 + 4.0 / y**2 + 2.0 * np.sqrt(2.0) / y) - I * atan_y_neg
-    z_neg = 1.0 + np.exp(I * pi / 4.0) * y
-
-    indrot = np.where(rot_tab < rot_small)[0][-1]  # Fix index for small rot_tab case
-
-    for ie in range(Ne_1):
-        e_1 = e_1tab[ie]
-        A = e_1 / (e_1 + 2.0)
-        time_neg = 1.0 / np.sqrt(e_1 * (e_1 + 2.0)) * (log_2 - 2.0 * (e_1 + 1.0) * z_neg / (z_neg**2 - 1.0))
-        fcos_neg = (1.0 - A * z_neg**2) / (1.0 + A * z_neg**2)**2
-        fsin_neg = z_neg / (1.0 + A * z_neg**2)**2
-
-        rot_exp_neg = np.exp(I * np.outer(rot_tab[:indrot], time_neg)) * Dz_neg[np.newaxis, :]
-        real_part_neg = np.sum(np.real(rot_exp_neg * fcos_neg[np.newaxis, :]))
-        imag_part_neg = np.sum(np.imag(rot_exp_neg * fsin_neg[np.newaxis, :]))
-
-        Ineg_tab[:indrot, ie] = 4.0 * A * real_part_neg**2 + 16.0 * A**2 * imag_part_neg**2
-
-    # Extend Zg < 0 for parabolic case
-    inde = np.where(e_1tab < e_1small)[0][-1]  # Fix index for small e_1tab case
-
-    for ie in range(inde):
-        e_1 = e_1tab[ie]
-        for ir in range(indrot, Nrot):
-            rot = rot_tab[ir]
-            Gamma = rot * e_1
-            if Gamma < Gamma_max:
-                Ineg_tab[ir, ie] = np.interp(Gamma, Gamma_tab, smalle_tab)
-
-    # Replace zeros with small values for precision
-    Ipos_tab = replace_zeros(Ipos_tab)
-    Ineg_tab = replace_zeros(Ineg_tab)
-
-    return Ipos_tab, Ineg_tab, rot_min, rot_max, e_1min, e_1max
-'''
-
-
-
-compute_int_plasma()
-
-@jit(nopython=False)
 def int_plasma(rot_new, e_1_new, Zg):
     """
     Returns I(omega * b/v, e-1, Zg non zero) by interpolating arrays computed by `compute_int_plasma`.
@@ -330,9 +327,7 @@ def int_plasma(rot_new, e_1_new, Zg):
 
     Returns:
     - result: Interpolated integrals for the input values.
-    """
-    Ipos_tab, Ineg_tab, rot_tab, rot_min, rot_max, e_1tab, e_1min, e_1max = plasma_tabs.Ipos_tab, plasma_tabs.Ineg_tab, \
-         plasma_tabs.rot_tab, plasma_tabs.rot_min, plasma_tabs.rot_max, plasma_tabs.e_1tab, plasma_tabs.e_1min, plasma_tabs.e_1max              
+    """          
 
     # Ensure rot_new and e_1_new have the same number of elements
     Nelem = np.size(rot_new)
@@ -380,7 +375,6 @@ def int_plasma(rot_new, e_1_new, Zg):
 
     return result
 
-@jit(nopython=False)
 def little_gp_charged(psi, Omega):
     u_min = 1e-10
     u_max = 5
@@ -465,6 +459,7 @@ def little_gp_neutral(phi, Omega):
     # Array to store the integral for each u
     Int_c = np.zeros(Nu)
 
+    '''
     # Loop over u values
     for iu in range(Nu):
         u = u_tab[iu]
@@ -477,6 +472,21 @@ def little_gp_neutral(phi, Omega):
 
             # Compute the integral for this u
             Int_c[iu] = np.sum(X_tab**2 * (beselk(0, X_tab)**2 + beselk(1, X_tab)**2) * DX_over_X_val)
+    '''
+
+    # Define function for parallel computation
+    def compute_integral(iu):
+        u = u_tab[iu]
+        X_min = Omega / u * np.sqrt(1.0 + phi / u)
+        if X_min < X_max:
+            X_tab = makelogtab(X_min, X_max, NX)
+            DX_over_X_val = DX_over_X(X_min, X_max, NX)
+            return np.sum(X_tab**2 * (beselk(0, X_tab)**2 + beselk(1, X_tab)**2) * DX_over_X_val)
+        else:
+            return 0.0
+        
+    # Parallel computation
+    Int_c = np.array(parallel_map(compute_integral, list(range(Nu))))
 
     # Final integral over u
     result = 2.0 * Du_over_u * np.sum(u_tab**2 * np.exp(-u_tab**2) * Int_c )
@@ -506,24 +516,58 @@ def compute_little_gp():
     gp_neutral = np.zeros((gp_arrays.Nphi, gp_arrays.NOmega))
 
     # --- Compute for charged grains ---
+    '''
     for ipsi, psi in enumerate(psi_tab):
         for iOmega, Omega in enumerate(Omega_tab):
             gp_pos[ipsi, iOmega] = little_gp_charged(psi, Omega)
             gp_neg[ipsi, iOmega] = little_gp_charged(-psi, Omega)
+    '''
+    # Define function for parallel computation
+    def compute_pos(ipsi):
+        psi = psi_tab[ipsi]
+        result = np.zeros(gp_arrays.NOmega)
+        for iOmega, Omega in enumerate(Omega_tab):
+            result[iOmega] = little_gp_charged(psi, Omega)
+        return result
+    
+    def compute_neg(ipsi):
+        psi = psi_tab[ipsi]
+        result = np.zeros(gp_arrays.NOmega)
+        for iOmega, Omega in enumerate(Omega_tab):
+            result[iOmega] = little_gp_charged(-psi, Omega)
+        return result
+    
+    # Parallel computation
+    gp_pos = np.array(parallel_map(compute_pos, list(range(gp_arrays.Npsi))))
+    gp_neg = np.array(parallel_map(compute_neg, list(range(gp_arrays.Npsi))))
+        
 
-    # Save gp_pos to file
-    np.savetxt(gp_pos_filename, gp_pos)
+    if rank0:
+        # Save gp_pos to file
+        np.savetxt(gp_pos_filename, gp_pos)
 
-    # Save gp_neg to file    
-    np.savetxt(gp_neg_filename, gp_neg)
+        # Save gp_neg to file    
+        np.savetxt(gp_neg_filename, gp_neg)
 
     # --- Compute for neutral grains ---
+    """
     for iphi, phi in enumerate(phi_tab):
         for iOmega, Omega in enumerate(Omega_tab):
-            gp_neutral[iphi, iOmega] = little_gp_neutral(phi, Omega)
+            gp_neutral[iphi, iOmega] = little_gp_neutral(phi, Omega)    
+    """
 
-    # Save gp_neutral to file
-    np.savetxt(gp_neutral_filename, gp_neutral)
+    def compute_neutral(iphi):
+        phi = phi_tab[iphi]
+        result = np.zeros(gp_arrays.NOmega)
+        for iOmega, Omega in enumerate(Omega_tab):
+            result[iOmega] = little_gp_neutral(phi, Omega)
+        return result
+    
+    gp_neutral = np.array(parallel_map(compute_neutral, list(range(gp_arrays.Nphi))))
+    
+    if rank0:
+        # Save gp_neutral to file
+        np.savetxt(gp_neutral_filename, gp_neutral)
 
     # Store the results
     gp_arrays.gp_pos = gp_pos
@@ -533,13 +577,19 @@ def compute_little_gp():
     return 
 
 compute_little_gp()
-
-class warnings:
-    warning_phi_min, warning_phi_max, warning_psi_min, warning_psi_max, warning_Omega_min, warning_Omega_max \
-    = None, None, None, None, None, None
+barrier()
 
 
 def little_gp_charged_interpol(psi_arr, Omega_arr):
+    """
+    Parameters:
+    - psi_arr: Array of grain potentials
+    - Omega_arr: Array of grain rotation frequencies
+
+    Returns:
+    - gp_charged: Interpolated values of gp_charged for the input psi_arr and Omega_arr
+    should be a 2D array of size (Npsi, NOmega)
+    """
 
     Npsi = gp_arrays.Npsi
     NOmega = gp_arrays.NOmega
@@ -574,32 +624,61 @@ def little_gp_charged_interpol(psi_arr, Omega_arr):
     NOmega_arr = np.size(Omega_arr)
     gp_charged = np.zeros((Npsi_arr, NOmega_arr))
 
-    # Positively charged grains
-    ind_pos = np.where(psi_arr > 0)[0]
-    if len(ind_pos) > 0:
-        for idx in ind_pos:
-            i, j = psi_indices[idx], Omega_indices[idx]
-            pc, oc = psi_coeff[idx], Omega_coeff[idx]
-            gp_charged[idx] = np.exp(
-                pc * (oc * np.log(gp_pos[i, j]) + (1 - oc) * np.log(gp_pos[i, j + 1])) +
-                (1 - pc) * (oc * np.log(gp_pos[i + 1, j]) + (1 - oc) * np.log(gp_pos[i + 1, j + 1]))
-            )
+    # Expand psi_indices and Omega_indices across the appropriate dimensions
+    # Multiply psi_indices across the NOmega_arr dimension
+    psi_indices = np.dot(psi_indices.reshape(-1, 1), np.ones((1, NOmega_arr), dtype=int))
 
-    # Negatively charged grains
-    ind_neg = np.where(psi_arr < 0)[0]
-    if len(ind_neg) > 0:
-        for idx in ind_neg:
-            i, j = psi_indices[idx], Omega_indices[idx]
-            pc, oc = psi_coeff[idx], Omega_coeff[idx]
-            gp_charged[idx] = np.exp(
-                pc * (oc * np.log(gp_neg[i, j]) + (1 - oc) * np.log(gp_neg[i, j + 1])) +
-                (1 - pc) * (oc * np.log(gp_neg[i + 1, j]) + (1 - oc) * np.log(gp_neg[i + 1, j + 1]))
+    # Multiply Omega_indices across the Npsi_arr dimension
+    Omega_indices = np.dot(np.ones((Npsi_arr, 1), dtype=int), Omega_indices.reshape(1, -1))
+
+    # Step 4: Expand psi_coeff and Omega_coeff similarly across the dimensions
+    # Expand psi_coeff across the NOmega_arr dimension
+    psi_coeff = np.dot(psi_coeff.reshape(-1, 1), np.ones((1, NOmega_arr)))
+
+    # Expand Omega_coeff across the Npsi_arr dimension
+    Omega_coeff = np.dot(np.ones((Npsi_arr, 1)), Omega_coeff.reshape(1, -1))
+    
+    def loop_charged(ipsi):
+        result = np.zeros(NOmega_arr)
+        psi_indices_charged = psi_indices[ipsi]
+        psi_coeff_charged = psi_coeff[ipsi]
+        Omega_indices_charged = Omega_indices[ipsi, :]
+        Omega_coeff_charged = Omega_coeff[ipsi, :]
+
+        if psi_arr[ipsi] > 0:
+            
+            result = np.exp(
+                psi_coeff_charged * (Omega_coeff_charged * np.log(gp_pos[psi_indices_charged, Omega_indices_charged]) + 
+                                 (1 - Omega_coeff_charged) * np.log(gp_pos[psi_indices_charged, Omega_indices_charged + 1])) +
+                (1 - psi_coeff_charged) * (Omega_coeff_charged * np.log(gp_pos[psi_indices_charged + 1, Omega_indices_charged]) + 
+                                       (1 - Omega_coeff_charged) * np.log(gp_pos[psi_indices_charged + 1, Omega_indices_charged + 1]))
             )
+        elif psi_arr[ipsi] < 0:
+            result = np.exp(
+                psi_coeff_charged * (Omega_coeff_charged * np.log(gp_neg[psi_indices_charged, Omega_indices_charged]) + 
+                                 (1 - Omega_coeff_charged) * np.log(gp_neg[psi_indices_charged, Omega_indices_charged + 1])) +
+                (1 - psi_coeff_charged) * (Omega_coeff_charged * np.log(gp_neg[psi_indices_charged + 1, Omega_indices_charged]) + 
+                                       (1 - Omega_coeff_charged) * np.log(gp_neg[psi_indices_charged + 1, Omega_indices_charged + 1]))
+            )
+        return result
+    
+    gp_charged = np.array(parallel_map(loop_charged, list(range(Npsi_arr))))
 
     return gp_charged
 
 
+
 def little_gp_neutral_interpol(phi, Omega_arr):
+    """
+    Parameters:
+    - phi: Grain potential
+    - Omega_arr: Array of grain rotation frequencies
+
+    Returns:
+    - gp_neu: Interpolated values of gp_neutral for the input phi and Omega_arr
+    should be a 1D array of the same size as Omega_arr
+    """
+
     phi_min = gp_arrays.phi_min
     phi_max = gp_arrays.phi_max
     Nphi = gp_arrays.Nphi
@@ -613,7 +692,7 @@ def little_gp_neutral_interpol(phi, Omega_arr):
 
     # Find the index and coefficient for phi
     phi_index = int(np.floor(Nphi * np.log(phi / phi_min) / np.log(phi_max / phi_min) - 0.5))
-    phi_index = max(0, min(phi_index, Nphi - 2))  # Ensure phi_index is within bounds
+    phi_index = np.max((0, np.min((phi_index, Nphi - 2))))  # Ensure phi_index is within bounds
 
     # Calculate interpolation coefficient for phi
     phi_coeff = 1 - Nphi * np.log(phi / phi_tab[phi_index]) / np.log(phi_max / phi_min)
@@ -633,7 +712,6 @@ def little_gp_neutral_interpol(phi, Omega_arr):
     # Return interpolated values for gp_neutral
     return Omega_coeff * gp_neu_phi[Omega_indices] + (1 - Omega_coeff) * gp_neu_phi[Omega_indices + 1]
 
-
 def Gp_sphere_per_mu2_averaged(env, a, fZ, omega):
     """
     Returns G_p^(AHD09)(a, omega)/mu_ip^2 averaged over grain charges.
@@ -641,7 +719,7 @@ def Gp_sphere_per_mu2_averaged(env, a, fZ, omega):
     Parameters:
     - env: Environment containing T, xh, and xC.
     - a: Grain size.
-    - fZ: Grain charge distribution array.
+    - fZ: Grain charge distribution array. 
     - omega: Frequency values.
 
     Returns:
@@ -672,13 +750,12 @@ def Gp_sphere_per_mu2_averaged(env, a, fZ, omega):
     ind_charged = np.where(Zg_arr != 0)[0]
     if len(ind_charged) > 0:
         psi_arr = Zg_arr[ind_charged] * q**2 / (acx_val * k * T)
-        little_gp_H += np.dot(little_gp_charged_interpol(psi_arr, Omega_H), fZ_arr[ind_charged])
-        little_gp_C += np.dot(little_gp_charged_interpol(psi_arr, Omega_C), fZ_arr[ind_charged])
+        little_gp_H += np.matmul(little_gp_charged_interpol(psi_arr, Omega_H).T, fZ_arr[ind_charged])
+        little_gp_C += np.matmul(little_gp_charged_interpol(psi_arr, Omega_C).T, fZ_arr[ind_charged])
 
     Gp_over_mu2 = (q / (acx_val**2 * k * T))**2 * (xh * little_gp_H + xC * np.sqrt(12) * little_gp_C)
 
     return Gp_over_mu2
-
 
 def FGp_averaged(env, a, fZ, omega, mu_ip, mu_op, tumbling=True):
     """
@@ -694,8 +771,10 @@ def FGp_averaged(env, a, fZ, omega, mu_ip, mu_op, tumbling=True):
     - tumbling: Boolean, whether the grain is tumbling.
 
     Returns:
-    - A dictionary with Fp and Gp arrays.
+    - A dictionary with Fp and Gp arrays. Shape: [Nomega, Nmu]
     """
+    mu_ip_2 = np.array(mu_ip)**2
+    mu_op_2 = np.array(mu_op)**2
     if tumbling:
         # Disklike tumbling grain
         Gp_op = 2 / 3 * Gp_sphere_per_mu2_averaged(env, a, fZ, 2 * omega)
@@ -710,14 +789,15 @@ def FGp_averaged(env, a, fZ, omega, mu_ip, mu_op, tumbling=True):
         Fp_ip = 0.5 * (Gp_sphere_per_mu2_averaged(env, a, fZ, omegaF_plus) +
                        Gp_sphere_per_mu2_averaged(env, a, fZ, omegaF_minus))
 
-        Fp = np.dot(Fp_ip, mu_ip**2) + np.dot(Fp_op, mu_op**2)
-        Gp = np.dot(Gp_ip, mu_ip**2) + np.dot(Gp_op, mu_op**2)
+        Fp = np.matmul(Fp_ip.reshape(-1,1), mu_ip_2.reshape(1,-1)) + np.matmul(Fp_op.reshape(-1,1), mu_op_2.reshape(1,-1))
+        Gp = np.matmul(Gp_ip.reshape(-1,1), mu_ip_2.reshape(1,-1)) + np.matmul(Gp_op.reshape(-1,1), mu_op_2.reshape(1,-1))
+        return {'Fp': Fp, 'Gp': Gp}
 
-    else:
-        # Standard spherical grain with K = J
-        Gp = Gp_sphere_per_mu2_averaged(env, a, fZ, omega)
-        Gp = np.dot(Gp, mu_ip**2)
-        Fp = Gp
+   
+    # Standard spherical grain with K = J
+    Gp = Gp_sphere_per_mu2_averaged(env, a, fZ, omega)
+    Gp = np.matmul(Gp.reshape(-1,1), mu_ip_2.reshape(1,-1))
+    Fp = Gp
 
     return {'Fp': Fp, 'Gp': Gp}
 

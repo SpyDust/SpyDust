@@ -1,16 +1,17 @@
-from core.compile_spydust import SpDust_data_dir
+from spdust import SpDust_data_dir
 from utils.util import cgsconst, DX_over_X, maketab, makelogtab 
+from spdust.grain_properties import acx, Inertia, grainparams, rms_dipole, size_dist
+from spdust.charge_dist import charge_dist
+from spdust.infrared import FGIR_averaged
+from spdust.collisions import Tev_effective, FGn_averaged, FGi_averaged
+from spdust.plasmadrag import FGp_averaged
+from spdust.H2_photoemission import GH2, FGpe_averaged
+
 import numpy as np
+import pandas as pd
 from scipy.interpolate import interp1d
 
-from charge_dist import charge_dist
-from spdust.grain_properties import acx, Inertia, grainparams, rms_dipole, size_dist
-from collisions import Tev_effective, FGn_averaged, FGi_averaged
-from spdust.infrared import FGIR_averaged
-from spdust.H2_photoemission import GH2, FGpe_averaged
-from spdust.plasmadrag import FGp_averaged
 
-from numba import njit, jit
 
 pi = np.pi
 c = cgsconst.c
@@ -22,7 +23,6 @@ q = cgsconst.q
 mp = cgsconst.mp
 
 # Function to calculate the characteristic damping time through collisions with neutral H atoms
-@jit
 def tau_H(env, a):
     """
     Returns the characteristic damping time through collisions with neutral H atoms.
@@ -44,7 +44,6 @@ def tau_H(env, a):
     return 1.0 / (nh * mp * np.sqrt(2 * k * T / (pi * mp)) * 4 * pi * acx_val**4 / (3 * Inertia_val))
 
 # Function to calculate the inverse of the characteristic damping time through electric dipole radiation
-@jit
 def tau_ed_inv(env, a, mu_ip, mu_op, tumbling=True):
     """
     Returns the inverse of the characteristic damping time through electric dipole radiation.
@@ -144,14 +143,14 @@ def f_rot(env, a, ia, fZ, mu_ip, mu_op, tumbling=True):
     omega_peak_high = omega_peak_th * np.sqrt(2 * G_high / F_high / (1 + np.sqrt(1 + xi_high)))
 
     # Array omega
-    omega_min = 5e-3 * min([omega_peak_low, omega_peak_high])
-    omega_max = 6 * max([omega_peak_low, omega_peak_high])
+    omega_min = 5e-3 * np.min((omega_peak_low, omega_peak_high))
+    omega_max = 6 * np.max((omega_peak_low, omega_peak_high))
     omega = makelogtab(omega_min, omega_max, Nomega) 
     Dln_omega = DX_over_X(omega_min, omega_max, Nomega) 
 
     # Fp(omega), Gp(omega)
     FGp = FGp_averaged(env, a, fZ, omega, mu_ip, mu_op, tumbling=tumbling)
-    Fp = FGp['Fp']
+    Fp = FGp['Fp'] # shape (Nomega, Nmu)
     Gp = FGp['Gp']
 
     # Rotational distribution function, AHD09 Eq.(33)
@@ -262,9 +261,9 @@ def mu2_fa(env, a, ia, fZ, mu_rms, ip, Ndipole, tumbling=True):
             Proba = np.outer(Proba, np.ones(Nomega))
             x_tab = np.outer(x_tab, np.ones(Nomega))
 
-            mu2_fa = np.sum(x_tab**2 * Proba * f_a, axis=0)
-            mu_ip2_fa = mu2_fa
-            mu_op2_fa = mu2_fa
+            mu2_fa_aux = np.sum(x_tab**2 * Proba * f_a, axis=0)
+            mu_ip2_fa = mu2_fa_aux 
+            mu_op2_fa = mu2_fa_aux 
 
     # Prepare the result as a [3, Nomega] array
     result = np.zeros((3, Nomega))
@@ -277,6 +276,7 @@ def mu2_fa(env, a, ia, fZ, mu_rms, ip, Ndipole, tumbling=True):
     # np.savez(f'{ia}_mu_fa.npz', omega=omega, mu_ip2_fa=mu_ip2_fa, mu_op2_fa=mu_op2_fa, mu_rms=mu_rms, ip=ip)
 
     return result
+
 
 def fa_ip_fa_op(omega, mu_ip2_fa, mu_op2_fa):
     """
@@ -346,10 +346,10 @@ def dP_dnu_dOmega(env, a, ia, beta, ip, Ndipole, tumbling=True):
     mu_rms = rms_dipole(a, Z2, beta)
     
     # Calculate rotational distribution for in-plane and out-of-plane dipole moments
-    mu2_fa = mu2_fa(env, a, ia, fZ, mu_rms, ip, Ndipole, tumbling=tumbling)
-    omega = mu2_fa[0, :]
-    mu_ip2_fa = mu2_fa[1, :]
-    mu_op2_fa = mu2_fa[2, :]
+    mu2_fa_aux  = mu2_fa(env, a, ia, fZ, mu_rms, ip, Ndipole, tumbling=tumbling)
+    omega = mu2_fa_aux[0, :]
+    mu_ip2_fa = mu2_fa_aux[1, :]
+    mu_op2_fa = mu2_fa_aux[2, :]
     
     # Tumbling case for disklike grains
     if tumbling:
@@ -374,8 +374,12 @@ def dP_dnu_dOmega(env, a, ia, beta, ip, Ndipole, tumbling=True):
         print(f"Power vanishes for a = {a}")
         return np.array([0.0, 0.0])
 
-def emissivity(env, beta, ip, Ndipole, nu_tab, size_dist_params, tumbling=True):
+def emissivity(env, beta, ip, Ndipole, nu_tab, tumbling=True):
     """
+    Parameters:
+    - env: Environment parameters.
+
+
     Returns j_nu/nH in cgs units (ergs/s/sr/H atom) for the given environment.
     """
     
@@ -388,7 +392,8 @@ def emissivity(env, beta, ip, Ndipole, nu_tab, size_dist_params, tumbling=True):
     
     # Initialize emissivity array
     emiss = np.zeros(len(nu_tab))
-    
+    line = env['line'] - 1
+
     # Loop over each grain size
     for ia in range(Na):
         a = a_tab[ia]
@@ -406,7 +411,7 @@ def emissivity(env, beta, ip, Ndipole, nu_tab, size_dist_params, tumbling=True):
         ind = np.where((nu_tab > np.min(nu_tab_a)) & (nu_tab < np.max(nu_tab_a)))[0]
         if len(ind) > 0:
             # Interpolate emissivity and accumulate
-            emiss[ind] += np.exp(interp1d(np.log(nu_tab_a), np.log(emiss_a), kind='cubic')(np.log(nu_tab[ind]))) * size_dist(a, size_dist_params) * a * Da_over_a
+            emiss[ind] += np.exp(interp1d(np.log(nu_tab_a), np.log(emiss_a), kind='cubic')(np.log(nu_tab[ind]))) * size_dist(a, line) * a * Da_over_a
     
     return emiss
 
