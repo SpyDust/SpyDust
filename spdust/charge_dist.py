@@ -9,8 +9,8 @@
 
 import numpy as np
 from utils.util import *
+from spdust import SpDust_data_dir  
 from spdust.grain_properties import *
-from core.compile_spydust import SpDust_data_dir        
 from scipy.interpolate import interp1d    
 import os      
 from numba import njit, jit

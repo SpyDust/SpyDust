@@ -1,16 +1,8 @@
-import numpy as np
+from spdust import SpDust_data_dir
 import os
+import numpy as np
 
-import yaml
 
-
-with open('config.yml', 'r') as file:
-    config = yaml.safe_load(file)
-
-# Define the directory path
-SpDust_data_dir = '/Users/user/SPDUST.2.01/Data_Files/'
-
-SpDust_data_dir = config['SpDust_data_dir']
 
 # Define the path to the size distribution file
 size_dist_file = os.path.join(SpDust_data_dir, 'sizedists_table1.out')
@@ -30,9 +22,4 @@ class size_params():
         self.ac_g = size_dist_arrays.ac_tab[line] * 1e-4
         self.C_g = size_dist_arrays.C_tab[line]
         pass
-
-import spdust.infrared as ir
-
-def spydust()
-
 
