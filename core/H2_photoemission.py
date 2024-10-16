@@ -1,5 +1,5 @@
-from spdust.grain_properties import acx, asurf
-from spdust.charge_dist import refr_indices, hnu_pdt, hnu_pet, Y, Qabs, sigma_pdt, nu_uisrf, E_min, JPEisrf
+from main.Grain import acx, asurf
+from core.charge_dist import refr_indices, hnu_pdt, hnu_pet, Y, Qabs, sigma_pdt, nu_uisrf, E_min, JPEisrf
 from utils.util import DX_over_X, makelogtab, cgsconst
 import numpy as np
 
@@ -16,13 +16,13 @@ hnu_tab = refr_indices.hnu_tab
 la_tab = refr_indices.la_tab   
 
 # Define the GH2 function
-def GH2(env, a):
+def GH2(env, a, beta):
     """
     Excitation rate due to random H2 formation.
     
     Parameters:
     - env: an object or dictionary containing environment properties T, nh, y, gamma
-    - a: parameter for which `acx(a)` will be calculated
+    - a, beta: parameter for which `acx(a, beta)` will be calculated
 
     Returns:
     - Excitation rate (GH2)
@@ -34,7 +34,7 @@ def GH2(env, a):
     gamma = env['gamma']
     
     # Calculate ax from acx(a)
-    ax = acx(a)
+    ax = acx(a, beta)
 
     # Define Ef (formation energy) and JJplus1 (quantum number term)
     Ef = 0.2 * eV
@@ -46,7 +46,7 @@ def GH2(env, a):
     return GH2_value
 
 # Function FGpeZ
-def FGpeZ(env, a, Z):
+def FGpeZ(env, a, beta, Z):
     """
     Calculate Fpe and Gpe for a given environment, grain size 'a', and charge 'Z'.
     
@@ -63,7 +63,7 @@ def FGpeZ(env, a, Z):
     T = env['T']
     nh = env['nh']
     Chi = env['Chi']
-    asurf_val = asurf(a)  
+    asurf_val = asurf(a, beta)  
 
     # Get Jpeisrf 
     aux1, aux2 = JPEisrf(a)
@@ -112,7 +112,7 @@ def FGpeZ(env, a, Z):
     return {'Fpe': Fpe, 'Gpe': Gpe}
 
 
-def FGpe_averaged(env, a, fZ):
+def FGpe_averaged(env, a, beta, fZ):
     """
     Computes the averaged values of Fpe and Gpe over grain charges.
 
@@ -131,7 +131,7 @@ def FGpe_averaged(env, a, fZ):
 
     # Loop over all grain charge states
     for i in range(NZ):
-        FGpe = FGpeZ(env, a, fZ[0, i])  # Get the Fpe and Gpe for charge state Zg
+        FGpe = FGpeZ(env, a, beta, fZ[0, i])  # Get the Fpe and Gpe for charge state Zg
         Fpe += fZ[1, i] * FGpe['Fpe']   # Weighted Fpe
         Gpe += fZ[1, i] * FGpe['Gpe']   # Weighted Gpe
 

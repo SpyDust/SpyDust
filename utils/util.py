@@ -106,6 +106,14 @@ def log_interp(x, x_vals, y_vals):
     interp_log_y = np.interp(np.log(x), np.log(x_vals), log_y_vals)
     return np.exp(interp_log_y)
 
+def extend_to_array(data):
+    """ Convert list of (a, beta_tab, prob_tab) into a single array of shape (Npoints, 3). """
+    extended_data = []
+    for a, beta_tab, prob_tab in data:
+        for beta, prob in zip(beta_tab, prob_tab):
+            extended_data.append([a, beta, prob])
+    return np.array(extended_data)
+
 def readcol(name, comment=None, format=None):
     """
     Read a free-format ASCII file with columns of data into numpy arrays.

@@ -8,9 +8,10 @@
 
 
 import numpy as np
-from spdust import SpDust_data_dir  
+from core import SpDust_data_dir  
 from utils.util import cgsconst, makelogtab, DX_over_X, biinterp_func, coord_grid
-from spdust.grain_properties import asurf, N_C
+from utils.mpiutil import *
+from main.Grain import asurf, N_C
 from scipy.interpolate import interp1d    
 import os      
 from numba import njit, jit
@@ -134,7 +135,8 @@ def l_a():
     # Calculate la_tab using WD01 (15)
     la_tab_aux = 3 * lamb_tab / (4 * pi) / (2 * Imm_perp_interp + Imm_para)
 
-    print('l_a computed')
+    if rank0:
+        print('l_a computed')
 
     return hnu_tab_aux, la_tab_aux
 
@@ -142,11 +144,11 @@ hnu_tab, la_tab = l_a()
 refr_indices.hnu_tab = hnu_tab
 refr_indices.la_tab = la_tab 
  
-# Takes care of small beta case in eq (13)
+# Takes care of small dipole case in eq (13)
 @njit
 def fy1(x):
     """
-    Takes care of small beta case as described in equation (13).
+    Takes care of small dipole case as described in equation (13).
     
     Parameters:
     - x: NumPy array of values for which the function is computed.
@@ -288,7 +290,8 @@ def readPAH():
     # Calculate wavelength array
     Qabs_hnu_tab = h * c / (lambda_tab * 1e-4) / eV
 
-    print('readPAH computed')
+    if rank0:
+        print('readPAH computed')
 
     Qabstabs.Nrad = Nrad
     Qabstabs.Nwav = Nwav
@@ -446,7 +449,8 @@ def JPEisrf_calc(filename='jpeisrf_data.npz'):
         a_values = data['a_values']
         Jpe_pos_isrf = data['Jpe_pos_isrf']
         Jpe_neg_isrf = data['Jpe_neg_isrf']
-        print('Loaded previously computed Jpeisrf arrays from file.')
+        if rank0:
+            print('Loaded previously computed Jpeisrf arrays from file.')
     else:
         a_min = 3.5e-8
         a_max = 1e-6
@@ -468,11 +472,12 @@ def JPEisrf_calc(filename='jpeisrf_data.npz'):
                     Z = -j
                     Jpe_neg_isrf[i, j] = Jpe(Z, a)
 
-        print('Jpeisrf computed')
+        if rank0:
+            print('Jpeisrf computed')
 
-        # Save computed arrays to file for future use
-        np.savez(filename, a_values=a_values, Jpe_pos_isrf=Jpe_pos_isrf, Jpe_neg_isrf=Jpe_neg_isrf)
-        print(f'Jpeisrf arrays saved to {filename}.')
+            # Save computed arrays to file for future use
+            np.savez(filename, a_values=a_values, Jpe_pos_isrf=Jpe_pos_isrf, Jpe_neg_isrf=Jpe_neg_isrf)
+            print(f'Jpeisrf arrays saved to {filename}.')
 
     jpe_arrays.a_values = a_values
     jpe_arrays.Jpe_pos_isrf = Jpe_pos_isrf
@@ -560,37 +565,37 @@ def se(Z, a):
 
 # Function to calculate J_ion
 @njit
-def J_ion_aux(nh, T, xh, xc, Z, a):
-    asurf_val = asurf(a)  
+def J_ion_aux(nh, T, xh, xc, Z, a, beta):
+    asurf_val = asurf(a, beta)  
     tau = asurf_val * k * T / q**2
     nu = Z 
     return nh * np.sqrt(8.0 * k * T / (pi * mp)) * pi * asurf_val**2 * (xh + xc / np.sqrt(12.0)) * Jtilde(tau, nu)
 
-def J_ion(env, Z, a):
+def J_ion(env, Z, a, beta):
     nh = env['nh']
     T = env['T']
     xh = env['xh']
     xc = env['xC']
-    return J_ion_aux(nh, T, xh, xc, Z, a)
+    return J_ion_aux(nh, T, xh, xc, Z, a, beta)
 
 # Function to calculate J_electron
 @njit
-def J_electron_aux(nh, T, xh, xc, Z, a):
-    asurf_val = asurf(a)  
+def J_electron_aux(nh, T, xh, xc, Z, a, beta):
+    asurf_val = asurf(a, beta)  
     tau = asurf_val * k * T / q**2
     nu = -Z 
     return nh * (xh + xc) * se(Z, a) * np.sqrt(8.0 * k * T / (np.pi * me)) * pi * asurf_val**2 * Jtilde(tau, nu)
 
-def J_electron(env, Z, a):
+def J_electron(env, Z, a, beta):
     nh = env['nh']
     T = env['T']
     xh = env['xh']
     xc = env['xC']
-    return J_electron_aux(nh, T, xh, xc, Z, a) 
+    return J_electron_aux(nh, T, xh, xc, Z, a, beta) 
 
 # Function to compute charge distribution
 @jit
-def charge_dist_aux(Chi, nh, T, xh, xc, a):
+def charge_dist_aux(Chi, nh, T, xh, xc, a, beta):
     Z_min = Zmin(a) 
     Z_max = Zmax(a)  
 
@@ -606,13 +611,13 @@ def charge_dist_aux(Chi, nh, T, xh, xc, a):
 
     for j in range(abs(Z_min) + 1):
         Z = -j
-        Ji_neg[j] = J_ion_aux(nh, T, xh, xc, Z, a)
-        Je_neg[j] = J_electron_aux(nh, T, xh, xc, Z, a)
+        Ji_neg[j] = J_ion_aux(nh, T, xh, xc, Z, a, beta)
+        Je_neg[j] = J_electron_aux(nh, T, xh, xc, Z, a, beta)
     Jpe_neg = Chi * Jpe_ISRF['Jpeneg']
 
     for Z in range(Z_max + 1):
-        Ji_pos[Z] = J_ion_aux(nh, T, xh, xc, Z, a)
-        Je_pos[Z] = J_electron_aux(nh, T, xh, xc, Z, a)
+        Ji_pos[Z] = J_ion_aux(nh, T, xh, xc, Z, a, beta)
+        Je_pos[Z] = J_electron_aux(nh, T, xh, xc, Z, a, beta)
     Jpe_pos = Chi * Jpe_ISRF['Jpepos']
 
     # Compute charge distribution function using DL98b (4)
@@ -672,11 +677,11 @@ def charge_dist_aux(Chi, nh, T, xh, xc, a):
 
     return fZ
 
-def charge_dist(env, a):
+def charge_dist(env, a, beta):
     Chi = env['Chi']
     nh = env['nh']
     T = env['T']
     xh = env['xh']
     xc = env['xC']
 
-    return charge_dist_aux(Chi, nh, T, xh, xc, a)
+    return charge_dist_aux(Chi, nh, T, xh, xc, a, beta)

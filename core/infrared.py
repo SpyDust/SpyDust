@@ -5,10 +5,10 @@
 # to compute the infrared spectrum.
 
 import numpy as np
-from spdust import SpDust_data_dir
+from core import SpDust_data_dir
 from utils.util import maketab, DX_over_X, cgsconst, makelogtab
-from spdust.grain_properties import N_C, N_H, Inertia, acx, grainparams
-from spdust.charge_dist import Qabs, nu_uisrf, Qabstabs
+from main.Grain import N_C, N_H, Inertia_largest, acx, grainparams
+from core.charge_dist import Qabs, nu_uisrf, Qabstabs
 from numba import jit, njit
 import os
 from utils.mpiutil import *
@@ -40,7 +40,7 @@ eV = cgsconst.eV
 pi = np.pi
 
 Energy_tab_max = np.max(Qabstabs.Qabs_hnu_tab) # Maximum energy (eV) in the Qabs_hnu_tab
-print(f"Maximum energy in the Qabs_hnu_tab is {Energy_tab_max:.2f} eV.")
+
 
 
 @njit
@@ -212,10 +212,6 @@ def Temp(a, Energy, Energy_modes_op, Energy_modes_ip, Energy_modes_CH):
     NT = 100
     T_tab = makelogtab(Tmin, Tmax, NT)
     E_tab = EPAH(a, T_tab, Energy_modes_op, Energy_modes_ip, Energy_modes_CH)
-
-    #if Energy > E_tab[-1] or Energy < E_tab[0]:
-    #    print(f'Energy {Energy / eV:.2f} eV is out of range in function Temp. The range is {E_tab[0] / eV:.2f} to {E_tab[-1] / eV:.2f} eV.')
-    #    return None
 
     Temperature = np.exp(np.interp(np.log(Energy), np.log(E_tab), np.log(T_tab)))
 
@@ -536,10 +532,10 @@ def distribution(a, Z, Chi,  Energy_modes_op, Energy_modes_ip, Energy_modes_CH, 
     X_tab = np.ones(M + 1)
 
     while X_tab[M] > 1e-14:    
-        print(f"E_M = {Energy_max / eV:.2f} eV is not high enough in 'distribution'. Using {3 * Energy_max / eV:.2f} eV instead")
         Energy_max *= 3
         aux1, M = Btilde_ISRF_func(a, Z,  Energy_modes_op, Energy_modes_ip, Energy_modes_CH, M, Energy_max) 
-        print("M = ", M)
+        if rank0:
+            print(f"E_M = {Energy_max / eV:.2f} eV is not high enough in 'distribution'. Using {3 * Energy_max / eV:.2f} eV instead")
         Btilde = Chi * aux1 
         X_tab = np.ones(M + 1)  # Reset X_tab since M might have changed
         
@@ -568,8 +564,6 @@ def distribution(a, Z, Chi,  Energy_modes_op, Energy_modes_ip, Energy_modes_CH, 
         X_tab[j] = np.sum(Btilde[j, 0:j] * X_tab[0:j])  # Reform array and compute sum
         X_tab[0:j + 1] =  X_tab[0:j + 1] / np.sum(X_tab[0:j + 1])  # Normalize the distribution
     '''
-    print("M = ", M)
-    print("x_tab[M]= ", X_tab[M])
 
     # Get the energy bins
     Energy_bins_eval = Energy_bins(a,  Energy_modes_op, Energy_modes_ip, Energy_modes_CH, M, Energy_max)  
@@ -730,10 +724,6 @@ def compute_FGIR_integrals():
         IR_arrays.FIR_integral_neutral = FIR_integral_neutral
         IR_arrays.GIR_integral_neutral = GIR_integral_neutral
 
-        # Print shape of the arrays
-        print(f'FIR_integral_charged shape: {FIR_integral_charged.shape}')
-        # Print Na and Nchi
-        print(f'Na: {Na}, Nchi: {Nchi}')
         return
 
     # Loop over grain sizes (a_tab) and Chi values (chi_tab)
@@ -879,7 +869,8 @@ def FGIR_integrals_interpol(a, Z, Chi):
     
     # --- Case of high radiation field: Approximate FIR, GIR by a power-law ---
     if Chi >= np.max(chi_tab):
-        print(f'You are using chi= {Chi}! The code is written for chi < 1E5. It assumes a power-law in chi for higher values.')
+        if rank0:
+            print(f'You are using chi= {Chi}! The code is written for chi < 1E5. It assumes a power-law in chi for higher values.')
 
         FIR_integral_last = np.exp(alpha * np.log(FIR_integral_tab[ia, Nchi-1]) 
                                    + (1.0 - alpha) * np.log(FIR_integral_tab[ia+1, Nchi-1]))
@@ -919,7 +910,7 @@ def FGIR_integrals_interpol(a, Z, Chi):
 
     return {'FIR_integral': FIR_integral, 'GIR_integral': GIR_integral}
 
-def FGIR(env, a, Zg):
+def FGIR(env, a, beta, Zg):
     """
     Computes FIR and GIR for a grain with radius `a`, charge `Zg`, and environment `env`.
 
@@ -938,8 +929,8 @@ def FGIR(env, a, Zg):
     nh = env['nh']
 
     # Compute various physical quantities
-    Inertia_val = Inertia(a) 
-    acx_val = acx(a)  
+    Inertia_val = Inertia_largest(a, beta) 
+    acx_val = acx(a, beta)  
     tau_H = 1.0 / (nh * mp * np.sqrt(2.0 * k * Tval / (pi * mp)) 
                    * 4.0 * pi * acx_val**4 / (3.0 * Inertia_val))
 
@@ -958,7 +949,7 @@ def FGIR(env, a, Zg):
 
     return {'FIR': FIR, 'GIR': GIR}
 
-def FGIR_averaged(env, a, fZ):
+def FGIR_averaged(env, a, beta, fZ):
     """
     Computes the averaged FIR and GIR values for a grain with radius `a`, using the charge distribution `fZ` and environment `env`.
 
@@ -975,8 +966,8 @@ def FGIR_averaged(env, a, fZ):
     f0 = fZ[1, 0]
 
     # Compute FIR and GIR for neutral and charged grains
-    FGIR_neutral = FGIR(env, a, 0)  # For neutral grain (Z = 0)
-    FGIR_charged = FGIR(env, a, 1)  # For charged grain (Z = 1)
+    FGIR_neutral = FGIR(env, a, beta, 0)  # For neutral grain (Z = 0)
+    FGIR_charged = FGIR(env, a, beta, 1)  # For charged grain (Z = 1)
 
     # Average the FIR and GIR values
     FIR = f0 * FGIR_neutral['FIR'] + (1.0 - f0) * FGIR_charged['FIR']
