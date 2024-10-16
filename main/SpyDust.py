@@ -61,7 +61,7 @@ def SpyDust(environment, tumbling=True, output_file=None, min_freq=None, max_fre
     beta_tab = grain_obj.beta_tab
 
     ang_Omega_min = 1e7
-    ang_Omega_max = 1e11
+    ang_Omega_max = 1e15
     N_angular_Omega = 1000
     angular_Omega_tab = makelogtab(ang_Omega_min, ang_Omega_max, N_angular_Omega)
 

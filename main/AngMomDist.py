@@ -141,41 +141,55 @@ def aux_int(Tval, F, G, omega, Nomega, Nmu, tau_H_val, tau_ed_inv_val, Inertia_v
 
     X = Inertia_val * omega_tab**2 / (k * Tval)     # shape (Nomega, Nmu)
     integrand = F / G * X + tau_H_val / (3 * G) * tau_ed_inv_matrix * X**2 # shape (Nomega, Nmu)
+
     #exponent = np.cumsum(integrand, axis=0) * Dln_omega 
     
     #exponent = cumsum_axis_0(integrand)* Dln_omega 
     exponent = np.cumsum(integrand, axis=0) * Dln_omega  # shape (Nomega, Nmu)
-    expo_min = np.min(exponent, axis=0)
-    expo_max = np.max(exponent, axis=0)
-    expo_mid = (expo_max + expo_min) / 2    # shape (Nmu,)
+
+    #expo_min = np.min(exponent, axis=0)
+    #expo_max = np.max(exponent, axis=0)
+    #expo_mid = (expo_max + expo_min) / 2    # shape (Nmu,)
     #print("expo_min, expo_max", expo_min, expo_max)
-    exponent = exponent - expo_mid[np.newaxis, :]
-    exponent = np.clip(exponent, -500, 500)
-    norm = 4 * pi * np.sum(omega_tab**3 * np.exp(-exponent), axis=0) * Dln_omega
+    #exponent = exponent - expo_mid[np.newaxis, :]
+    #exponent = np.clip(exponent, -500, 500)
     #exponent = exponent - (expo_max + expo_min) / 2
-    
     #exponent_aux = 3*np.log(omega_tab) - exponent + np.log(4 * pi * Dln_omega) 
     #norm = np.sum(np.exp(exponent_aux), axis=0) 
-    norm = np.ones((Nomega, 1)) @ norm.reshape(1, -1)
-    f_a = 1 / norm * np.exp(-exponent)
-    return f_a.T   # shape (Nmu, Nomega)
+    
+    # norm = 4 * pi * np.sum(omega_tab**3 * np.exp(-exponent), axis=0) * Dln_omega
+    # norm = np.ones((Nomega, 1)) @ norm.reshape(1, -1)
+    # f_a = 4 * pi * omega_tab**2 / norm * np.exp(-exponent)
+
+    norm = 4 * pi * np.sum( np.exp(3 * np.log(omega_tab) - exponent), axis=0) * Dln_omega
+    log_norm = np.log(norm)
+
+    log_norm = np.ones((Nomega, 1)) @ log_norm.reshape(1, -1)
+    
+    log_f_a = np.log(4 * pi * omega_tab**2) - exponent - log_norm
+    return log_f_a.T   # shape (Nmu, Nomega)
 
 
 @njit
-def rescale_f_rot(omega, f_a, beta):
+def rescale_f_rot(omega, f_a, beta, log=True):
     """
     This function rescales omega in spdust convention to our convention.
 
     Parameters:
     - omega: array of frequencies.
     - f_a: rotational distribution function (2D array with dimensions [Nmu, Nomega]).
+    - log: Boolean, whether the input f_a is in log scale.
     """
+    
     omega_new = omega / (1 + beta)
-    f_a_new = 4 * pi * omega[np.newaxis, :]**2 * f_a * (1 + beta)
+    if log:
+        result = f_a + np.log(1+beta)
+        return np.log(omega_new), result
+    f_a_new =  f_a * (1 + beta)
     return omega_new, f_a_new
 
     
-def f_rot(env, a, beta, fZ, mu_ip, mu_op, tumbling=True, omega_min=1e8, omega_max=1e16, Nomega=1000):
+def log_f_rot(env, a, beta, fZ, mu_ip, mu_op, tumbling=True, omega_min=1e8, omega_max=1e16, Nomega=1000):
     """
     Returns the rotational distribution function f_a:
     f(Omega | a, beta, mu)
@@ -264,19 +278,16 @@ def f_rot(env, a, beta, fZ, mu_ip, mu_op, tumbling=True, omega_min=1e8, omega_ma
     F = Fn + FIR + Fpe + np.matmul(np.ones((Nomega, 1)), Fi.reshape(1, -1)) + Fp
     G = Gn + GIR + Gpe + GH2_val + np.matmul(np.ones((Nomega, 1)), Gi.reshape(1, -1)) + Gp
     aux_result = aux_int(Tval, F, G, aux_omega, Nomega, Nmu, tau_H_val, tau_ed_inv_val, Inertia_val, Dln_omega) # shape: (Nmu, Nomega)
-    myOmega, aux_result = rescale_f_rot(aux_omega, aux_result, beta) 
+    log_Omega, aux_result = rescale_f_rot(aux_omega, aux_result, beta) 
     # Interpolate per mu
     result = np.zeros((Nmu, Nomega))
     omegaVec = makelogtab(omega_min, omega_max, Nomega)
     omegaVec_log = np.log(omegaVec)
     for ind in range(Nmu):
         aux_result_mu = aux_result[ind, :]
-        mask = aux_result_mu > 0
-        masked_omega = np.log(myOmega[mask])
-        masked_result = np.log(aux_result_mu[mask])
-        interp_func = interp1d(masked_omega, masked_result, kind='cubic', fill_value='extrapolate')
-        result[ind, :] = np.exp(interp_func(omegaVec_log))
-    return omegaVec, result
+        interp_func = interp1d(log_Omega, aux_result_mu, kind='cubic', fill_value='extrapolate')
+        result[ind, :] = interp_func(omegaVec_log)
+    return result
 
    
 
