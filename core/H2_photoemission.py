@@ -89,7 +89,7 @@ def FGpeZ(env, a, beta, Z):
         second_term = 0
         third_term = Jpepos[int(Z)] * (Z + 1) * q**2 / asurf_val
     else:
-        E_min_val = E_min(Z, a)  # Assuming `E_min` is a function
+        E_min_val = E_min(Z, a) 
         E_low = E_min_val * eV
         E_high = (E_min_val + hnu_pet_tab - hnu_pet_val) * eV
         Epe = 0.5 * (E_high + E_low)  # In erg

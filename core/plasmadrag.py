@@ -655,7 +655,7 @@ Omega_max = gp_arrays.Omega_max
 NOmega = gp_arrays.NOmega
 gp_neutral = gp_arrays.gp_neutral
 
-#@jit
+@jit
 def little_gp_neutral_interpol(phi, Omega_arr):
     """
     Parameters:

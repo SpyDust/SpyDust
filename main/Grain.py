@@ -362,7 +362,7 @@ class grain_distribution():
             dist /= np.sum(dist)
             return dist
 
-    def shape_and_size_dist(self, line, a_weighted=True, normalize=True):
+    def shape_and_size_dist(self, line, a_weighted=True, normalize=True, Nbeta=50):
         '''
         Calculate the joint distribution of the grain shape parameter, beta, and the grain size, a.
 
@@ -380,7 +380,7 @@ class grain_distribution():
         A 2D array with the joint distribution.
         '''
         size_func = self.size_dist_func(line)
-        beta_tab = np.linspace(-0.49, 0.1, 40)
+        beta_tab = np.linspace(-0.49, 0.1, Nbeta)
         result = np.zeros((len(self.a_tab), len(beta_tab)))
         a_dist = np.zeros_like(self.a_tab)
         for ai, a in enumerate(self.a_tab):
@@ -393,7 +393,7 @@ class grain_distribution():
             result[ai,:] = a_dist[ai] * self.shape_dist(a, beta_tab)
 
         aux = np.sum(result, axis=0)
-        ind = aux > 0
+        ind = aux > 1e-500 # Avoid beta values with very small probability
 
         self.beta_tab = beta_tab[ind]
         return result[:, ind] 

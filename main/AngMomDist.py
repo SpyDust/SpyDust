@@ -6,6 +6,8 @@ from core.collisions import Tev_effective, FGn_averaged, FGi_averaged
 from core.plasmadrag import FGp_averaged
 from core.H2_photoemission import GH2, FGpe_averaged
 
+from scipy.interpolate import interp1d
+
 from numba import njit, jit
 
 c = cgsconst.c
@@ -112,11 +114,11 @@ def tau_ed_inv(temp, a, beta, mu_ip, mu_op, tumbling=True):
     result = k * temp / (Inertia_val**2 * c**3 * (1+beta)**3)
     if tumbling and a<a2:
         # Tumbling disklike grains, SAH10 Eq. (47)
-        return result * ((2 * beta**3 / 5 + 8 * beta**2 / 5 + 2*beta) * mu_ip**2 + 4 / 3 * mu_op**2) 
+        return result * ((2 * beta**3 / 5 + 8 * beta**2 / 5 + 2*beta + 4/3) * mu_ip**2 + 4 / 3 * mu_op**2) 
     else:
         # largest inertia: 
-        # return result * (2 * beta**3 + 6*beta**2 + 6*beta + 2 ) * mu_ip**2 
-        return result * 2 * mu_ip**2  # small beta approximation
+        # return result * (2 * beta**3 + 6*beta**2 + 6*beta + 2 ) * mu_ip**2  # theta=0
+        return k * temp / (Inertia_val**2 * c**3) * 2 * mu_ip**2  # small beta approximation
 
 
 # Manually implemented cumulative sum function
@@ -145,10 +147,10 @@ def aux_int(Tval, F, G, omega, Nomega, Nmu, tau_H_val, tau_ed_inv_val, Inertia_v
     exponent = np.cumsum(integrand, axis=0) * Dln_omega  # shape (Nomega, Nmu)
     expo_min = np.min(exponent, axis=0)
     expo_max = np.max(exponent, axis=0)
-    expo_mid = (expo_max + expo_min) / 2 # shape (Nmu,)
-    print("expo_min, expo_max", expo_min, expo_max)
+    expo_mid = (expo_max + expo_min) / 2    # shape (Nmu,)
+    #print("expo_min, expo_max", expo_min, expo_max)
     exponent = exponent - expo_mid[np.newaxis, :]
-    #exponent = np.clip(exponent, -500, 500)
+    exponent = np.clip(exponent, -500, 500)
     norm = 4 * pi * np.sum(omega_tab**3 * np.exp(-exponent), axis=0) * Dln_omega
     #exponent = exponent - (expo_max + expo_min) / 2
     
@@ -156,20 +158,24 @@ def aux_int(Tval, F, G, omega, Nomega, Nmu, tau_H_val, tau_ed_inv_val, Inertia_v
     #norm = np.sum(np.exp(exponent_aux), axis=0) 
     norm = np.ones((Nomega, 1)) @ norm.reshape(1, -1)
     f_a = 1 / norm * np.exp(-exponent)
-    return omega, f_a.T
+    return f_a.T   # shape (Nmu, Nomega)
 
 
 @njit
 def rescale_f_rot(omega, f_a, beta):
     """
     This function rescales omega in spdust convention to our convention.
+
+    Parameters:
+    - omega: array of frequencies.
+    - f_a: rotational distribution function (2D array with dimensions [Nmu, Nomega]).
     """
     omega_new = omega / (1 + beta)
-    f_a_new = 4 * pi * omega**2 * f_a * (1 + beta)
+    f_a_new = 4 * pi * omega[np.newaxis, :]**2 * f_a * (1 + beta)
     return omega_new, f_a_new
 
     
-def f_rot_old(env, a, beta, fZ, mu_ip, mu_op, tumbling=True):
+def f_rot(env, a, beta, fZ, mu_ip, mu_op, tumbling=True, omega_min=1e8, omega_max=1e16, Nomega=1000):
     """
     Returns the rotational distribution function f_a:
     f(Omega | a, beta, mu)
@@ -190,7 +196,6 @@ def f_rot_old(env, a, beta, fZ, mu_ip, mu_op, tumbling=True):
     Returns:
     - Dictionary containing omega and f_a arrays.
     """
-    Nomega = 1000  # Number of omega values for which the function is calculated
     Nmu = np.size(mu_ip)  # Number of dipole moments
 
     Inertia_val = Inertia_largest(a, beta)  # Grain's moment of inertia
@@ -244,25 +249,40 @@ def f_rot_old(env, a, beta, fZ, mu_ip, mu_op, tumbling=True):
     omega_peak_high = omega_peak_th * np.sqrt(2 * G_high / F_high / (1 + np.sqrt(1 + xi_high)))
 
     # Array omega
-    omega_min = 5e-3 * np.min((omega_peak_low, omega_peak_high))
-    omega_max = 6 * np.max((omega_peak_low, omega_peak_high))
-    omega = makelogtab(omega_min, omega_max, Nomega) 
-    Dln_omega = DX_over_X(omega_min, omega_max, Nomega) 
+    #aux_omega_min = 5e-3 * np.min((omega_peak_low, omega_peak_high))
+    aux_omega_min = omega_min * (1+beta)
+    aux_omega_max = 3 * np.max((omega_peak_low, omega_peak_high))
+    aux_omega_max = np.min((aux_omega_max, omega_max * (1+beta)))
+    aux_omega = makelogtab(aux_omega_min, aux_omega_max, Nomega) 
+    Dln_omega = DX_over_X(aux_omega_min, aux_omega_max, Nomega) 
 
     # Fp(omega), Gp(omega)
-    FGp = FGp_averaged(env, a, beta, fZ, omega, mu_ip, mu_op, tumbling=tumbling)
+    FGp = FGp_averaged(env, a, beta, fZ, aux_omega, mu_ip, mu_op, tumbling=tumbling)
     Fp = FGp['Fp'] # shape (Nomega, Nmu)
     Gp = FGp['Gp']
 
     F = Fn + FIR + Fpe + np.matmul(np.ones((Nomega, 1)), Fi.reshape(1, -1)) + Fp
     G = Gn + GIR + Gpe + GH2_val + np.matmul(np.ones((Nomega, 1)), Gi.reshape(1, -1)) + Gp
-    result1, result2 = aux_int(Tval, F, G, omega, Nomega, Nmu, tau_H_val, tau_ed_inv_val, Inertia_val, Dln_omega)
-    return rescale_f_rot(result1, result2, beta)
+    aux_result = aux_int(Tval, F, G, aux_omega, Nomega, Nmu, tau_H_val, tau_ed_inv_val, Inertia_val, Dln_omega) # shape: (Nmu, Nomega)
+    myOmega, aux_result = rescale_f_rot(aux_omega, aux_result, beta) 
+    # Interpolate per mu
+    result = np.zeros((Nmu, Nomega))
+    omegaVec = makelogtab(omega_min, omega_max, Nomega)
+    omegaVec_log = np.log(omegaVec)
+    for ind in range(Nmu):
+        aux_result_mu = aux_result[ind, :]
+        mask = aux_result_mu > 0
+        masked_omega = np.log(myOmega[mask])
+        masked_result = np.log(aux_result_mu[mask])
+        interp_func = interp1d(masked_omega, masked_result, kind='cubic', fill_value='extrapolate')
+        result[ind, :] = np.exp(interp_func(omegaVec_log))
+    return omegaVec, result
+
    
 
 
     
-def f_rot(env, a, beta, fZ, mu_ip, mu_op, tumbling=True, omega_min=1e7, omega_max=1e11, Nomega=1000):
+def f_rot_old(env, a, beta, fZ, mu_ip, mu_op, tumbling=True, omega_min=1e7, omega_max=1e11, Nomega=1000):
     """
     Returns the rotational distribution function f_a:
     f(Omega | a, beta, mu)
@@ -316,8 +336,8 @@ def f_rot(env, a, beta, fZ, mu_ip, mu_op, tumbling=True, omega_min=1e7, omega_ma
 
     GH2_val = GH2(env, a, beta)
 
-    omega = makelogtab(omega_min, omega_max, Nomega) 
-    Dln_omega = DX_over_X(omega_min, omega_max, Nomega) 
+    omega = makelogtab(omega_min, omega_max, Nomega) * (1+beta)
+    Dln_omega = DX_over_X(omega_min*(1+beta) , omega_max*(1+beta), Nomega) 
 
     # Fp(omega), Gp(omega)
     FGp = FGp_averaged(env, a, beta, fZ, omega, mu_ip, mu_op, tumbling=tumbling)
