@@ -1,5 +1,5 @@
-from core import SpDust_data_dir
-from utils.util import cgsconst
+from SpyDust.core import SpDust_data_dir
+from SpyDust.utils.util import cgsconst
 
 import numpy as np
 

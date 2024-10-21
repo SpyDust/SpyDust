@@ -7,7 +7,7 @@ from SpyDust.core.plasmadrag import FGp_averaged
 from SpyDust.core.H2_photoemission import GH2, FGpe_averaged
 
 # To compare with the old plasma drag calculation in SpDust
-from spdust_python.spdust import plasmadrag as spd_plasmadrag
+
 from scipy.interpolate import interp1d
 
 from numba import njit, jit
@@ -276,18 +276,9 @@ def log_f_rot(env, a, beta, fZ, mu_ip, mu_op, tumbling=True, omega_min=1e8, omeg
     Dln_omega = DX_over_X(aux_omega_min, aux_omega_max, Nomega) 
 
     # Fp(omega), Gp(omega)
-    #FGp = FGp_averaged(env, a, beta, fZ, aux_omega, mu_ip, mu_op, tumbling=tumbling)
-    #Fp = FGp['Fp'] # shape (Nomega, Nmu)
-    #Gp = FGp['Gp']
-
-    if use_spdust_plasma:
-        FGp = spd_plasmadrag.FGp_averaged(env, a, fZ, aux_omega, mu_ip, mu_op, tumbling=tumbling)
-        Fp = FGp['Fp'] # shape (Nomega, Nmu)
-        Gp = FGp['Gp']
-    else:
-        FGp = FGp_averaged(env, a, beta, fZ, aux_omega, mu_ip, mu_op, tumbling=tumbling)
-        Fp = FGp['Fp'] # shape (Nomega, Nmu)
-        Gp = FGp['Gp']
+    FGp = FGp_averaged(env, a, beta, fZ, aux_omega, mu_ip, mu_op, tumbling=tumbling)
+    Fp = FGp['Fp'] # shape (Nomega, Nmu)
+    Gp = FGp['Gp']
 
     F = Fn + FIR + Fpe + np.matmul(np.ones((Nomega, 1)), Fi.reshape(1, -1)) + Fp
     G = Gn + GIR + Gpe + GH2_val + np.matmul(np.ones((Nomega, 1)), Gi.reshape(1, -1)) + Gp

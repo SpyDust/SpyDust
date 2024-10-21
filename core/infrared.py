@@ -5,13 +5,13 @@
 # to compute the infrared spectrum.
 
 import numpy as np
-from core import SpDust_data_dir
-from utils.util import maketab, DX_over_X, cgsconst, makelogtab
-from main.Grain import N_C, N_H, Inertia_largest, acx, grainparams
-from core.charge_dist import Qabs, nu_uisrf, Qabstabs
+from SpyDust.core import SpDust_data_dir
+from SpyDust.utils.util import maketab, DX_over_X, cgsconst, makelogtab
+from SpyDust.main.Grain import N_C, N_H, Inertia_largest, acx, grainparams
+from SpyDust.core.charge_dist import Qabs, nu_uisrf, Qabstabs
 from numba import jit, njit
 import os
-from utils.mpiutil import *
+from SpyDust.utils.mpiutil import *
 
 
 class IR_arrays:

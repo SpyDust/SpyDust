@@ -4,4 +4,4 @@
 package_version = "1.0"
 
 # Importing submodules for ease of access
-from main import *
+from .main import *

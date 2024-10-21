@@ -1,8 +1,8 @@
-from utils.util import cgsconst, DX_over_X, maketab, makelogtab 
-from utils.mpiutil import *
-from main.Grain import grainparams, rms_dipole
-from core.charge_dist import charge_dist
-from main.AngMomDist import log_f_rot
+from SpyDust.utils.util import cgsconst, DX_over_X, maketab, makelogtab 
+from SpyDust.utils.mpiutil import *
+from SpyDust.main.Grain import grainparams, rms_dipole
+from SpyDust.core.charge_dist import charge_dist
+from SpyDust.main.AngMomDist import log_f_rot
 from numba import njit, jit
 
 import numpy as np
@@ -20,7 +20,7 @@ q = cgsconst.q
 mp = cgsconst.mp
 
 
-def mu2_f_cond(env, a, beta, fZ, mu_rms, ip, Ndipole, tumbling=True, omega_min=1e7, omega_max=1e12, Nomega=1000):
+def mu2_f_cond(env, a, beta, fZ, mu_rms, ip, Ndipole, tumbling=True, omega_min=1e7, omega_max=1e12, Nomega=1000, spdust_plasma=False):
     """
     Returns a [3, Nomega] array:
     [omega, <mu_ip^2 fa(omega)>, <mu_op^2 fa(omega)>].
@@ -46,7 +46,7 @@ def mu2_f_cond(env, a, beta, fZ, mu_rms, ip, Ndipole, tumbling=True, omega_min=1
         mu_op = np.array([np.sqrt(op) * mu_rms]) # shape (1,)
         log_f_a = log_f_rot(env, a, beta, fZ, mu_ip, mu_op, 
                            tumbling=tumbling, 
-                           omega_min=omega_min, omega_max=omega_max, Nomega=Nomega)
+                           omega_min=omega_min, omega_max=omega_max, Nomega=Nomega, use_spdust_plasma=spdust_plasma)
         f_a = np.exp(log_f_a)
         mu_ip2_fa = f_a * mu_ip[0]**2
         mu_op2_fa = f_a * mu_op[0]**2
@@ -87,7 +87,8 @@ def mu2_f_cond(env, a, beta, fZ, mu_rms, ip, Ndipole, tumbling=True, omega_min=1
                                tumbling=tumbling,  
                                omega_min=omega_min, 
                                omega_max=omega_max, 
-                               Nomega=Nomega)
+                               Nomega=Nomega,
+                               use_spdust_plasma=spdust_plasma)
             f_a = np.exp(log_f_a)
 
             Proba = np.outer(Proba, np.ones(Nomega))
@@ -109,7 +110,7 @@ def mu2_f_cond(env, a, beta, fZ, mu_rms, ip, Ndipole, tumbling=True, omega_min=1
             Proba = Proba / np.sum(Proba)
 
             log_f_a = log_f_rot(env, a, beta, fZ, np.sqrt(2/3) * mu_rms * x_tab, mu_rms / np.sqrt(3) * x_tab, 
-                               tumbling=tumbling,  omega_min=omega_min, omega_max=omega_max, Nomega=Nomega)
+                               tumbling=tumbling,  omega_min=omega_min, omega_max=omega_max, Nomega=Nomega, use_spdust_plasma=spdust_plasma)
 
             f_a = np.exp(log_f_a)
 
@@ -133,7 +134,7 @@ def mu2_f_cond(env, a, beta, fZ, mu_rms, ip, Ndipole, tumbling=True, omega_min=1
     return result
 
 
-def mu2_f(env, a_tab, beta_tab, f_a_beta, mole_dipole, ip, Ndipole, tumbling=True, parallel=True, contract_a=True, omega_min=1e7, omega_max=1e15, Nomega=1000):
+def mu2_f(env, a_tab, beta_tab, f_a_beta, mole_dipole, ip, Ndipole, tumbling=True, parallel=True, contract_a=True, omega_min=1e7, omega_max=1e15, Nomega=1000, spdust_plasma=True):
     '''
     Calculate mu^2 f(omega, a, beta, mu) and marginalize over "mu" and "a" (if contract_a is True).
     '''
@@ -151,7 +152,7 @@ def mu2_f(env, a_tab, beta_tab, f_a_beta, mole_dipole, ip, Ndipole, tumbling=Tru
             fZ = charge_dist(env, a, beta)
             Z2 = np.sum(fZ[0, :]**2 * fZ[1, :])
             mu_rms = rms_dipole(a, beta, Z2, mole_dipole)
-            mu2_fa_aux  = mu2_f_cond(env, a, beta, fZ, mu_rms, ip, Ndipole, tumbling=tumbling, omega_min=omega_min, omega_max=omega_max, Nomega=Nomega)
+            mu2_fa_aux  = mu2_f_cond(env, a, beta, fZ, mu_rms, ip, Ndipole, tumbling=tumbling, omega_min=omega_min, omega_max=omega_max, Nomega=Nomega, spdust_plasma=spdust_plasma)
             result.append(mu2_fa_aux)
         return np.array(result)
     

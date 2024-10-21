@@ -1,13 +1,13 @@
-from main.Grain import N_C, N_H, grain_distribution
-from utils.util import cgsconst, makelogtab
-from utils.mpiutil import *
+from SpyDust.main.Grain import N_C, N_H, grain_distribution
+from SpyDust.utils.util import cgsconst, makelogtab
+from SpyDust.utils.mpiutil import *
 import numpy as np
 
-from main.SED import mu2_f, SED
+from .SED import mu2_f, SED
 
 debye = cgsconst.debye
 
-def SpyDust(environment, tumbling=True, output_file=None, min_freq=None, max_freq=None, n_freq=None, Ndipole=None):
+def SpyDust(environment, tumbling=True, output_file=None, min_freq=None, max_freq=None, n_freq=None, Ndipole=None, single_beta=True, spdust_plasma=False):
 
     # Check the environment structure for required parameters
     if 'dipole' not in environment and 'dipole_per_atom' not in environment:
@@ -56,7 +56,7 @@ def SpyDust(environment, tumbling=True, output_file=None, min_freq=None, max_fre
     nu_tab = makelogtab(numin, numax, Nnu)
 
     grain_obj = grain_distribution()
-    f_a_beta = grain_obj.shape_and_size_dist(line)
+    f_a_beta = grain_obj.shape_and_size_dist(line, normalize=False, fixed_thickness=single_beta)
     a_tab = grain_obj.a_tab
     beta_tab = grain_obj.beta_tab
 
@@ -72,7 +72,8 @@ def SpyDust(environment, tumbling=True, output_file=None, min_freq=None, max_fre
                       contract_a =True, 
                       omega_min=ang_Omega_min, 
                       omega_max=ang_Omega_max, 
-                      Nomega=N_angular_Omega)
+                      Nomega=N_angular_Omega,
+                      spdust_plasma=spdust_plasma)
     
     cos_theta_list = np.linspace(-1, 1, 20)
 

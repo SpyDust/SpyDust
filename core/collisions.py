@@ -1,9 +1,9 @@
-from core import SpDust_data_dir
-from utils.util import cgsconst, makelogtab, DX_over_X
-from utils.mpiutil import *
-from main.Grain import grainparams, N_C, acx
-from core.charge_dist import Qabs, nu_uisrf
-from core.infrared import Temp, Energy_modes, IR_arrays
+from SpyDust.core import SpDust_data_dir
+from SpyDust.utils.util import cgsconst, makelogtab, DX_over_X
+from SpyDust.utils.mpiutil import *
+from SpyDust.main.Grain import grainparams, N_C, acx
+from SpyDust.core.charge_dist import Qabs, nu_uisrf
+from SpyDust.core.infrared import Temp, Energy_modes, IR_arrays
 
 import numpy as np
 from scipy.special import erf

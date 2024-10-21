@@ -1,13 +1,13 @@
 import numpy as np
 from scipy.special import kv as beselk
 
-from core import SpDust_data_dir
-from utils.util import cgsconst, makelogtab, maketab, DX_over_X
-from main.Grain import acx, Inertia_largest
+from SpyDust.core import SpDust_data_dir
+from SpyDust.utils.util import cgsconst, makelogtab, maketab, DX_over_X
+from SpyDust.main.Grain import acx, Inertia_largest
 
 from numba import jit, njit
 import os
-from utils.mpiutil import *
+from SpyDust.utils.mpiutil import *
 
 
 k = cgsconst.k
@@ -783,9 +783,9 @@ def FGp_averaged(env, a, beta, fZ, omega_vec, mu_ip, mu_op, tumbling=True, paral
             return result
         
         if parallel:
-            Gp = np.array(parallel_map(Gp_vals, np.arange(Nomegas)))
+            Gp = np.array(parallel_map(Gp_vals, np.arange(Nomegas))).reshape(Nomegas, -1)
         else:
-            Gp = np.array([Gp_vals(ind) for ind in np.arange(Nomegas)])
+            Gp = np.array([Gp_vals(ind) for ind in np.arange(Nomegas)]).reshape(Nomegas, -1)
         I_3 = Inertia_largest(a, beta)
 
         aux =  k*temp / I_3 / omega_vec**2 
