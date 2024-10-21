@@ -7,7 +7,7 @@ from .SED import mu2_f, SED
 
 debye = cgsconst.debye
 
-def SpyDust(environment, tumbling=True, output_file=None, min_freq=None, max_freq=None, n_freq=None, Ndipole=None, single_beta=True, spdust_plasma=False):
+def SpyDust(environment, tumbling=True, output_file=None, min_freq=None, max_freq=None, n_freq=None, Ndipole=None, single_beta=False, spdust_plasma=False):
 
     # Check the environment structure for required parameters
     if 'dipole' not in environment and 'dipole_per_atom' not in environment:
