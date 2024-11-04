@@ -3,7 +3,7 @@ from scipy.special import kv as beselk
 
 from SpyDust import SpDust_data_dir
 from SpyDust.utils.util import cgsconst, makelogtab, maketab, DX_over_X
-from SpyDust.main.Grain import acx, Inertia_largest
+from SpyDust.main.Grain import acx, Inertia_largest, grainparams
 
 from numba import jit, njit
 import os
@@ -770,6 +770,10 @@ def FGp_averaged(env, a, beta, fZ, omega_vec, mu_ip, mu_op, tumbling=True, paral
     temp, xh, xC = env['T'], env['xh'], env['xC']
     Gp_op = 2/3 * Gp_per_mu2_averaged(temp, xh, xC, a, beta, fZ, 2 * omega_vec) 
     Nomegas = np.size(omega_vec)
+
+    if beta == 0: # Spherical grain
+        tumbling = False
+
     if tumbling:
         # Disklike tumbling grain 
         ## Corr: omega could be a vector

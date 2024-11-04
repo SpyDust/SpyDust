@@ -110,11 +110,15 @@ def tau_ed_inv(temp, a, beta, mu_ip, mu_op, tumbling=True):
 
     Returns:
     - Inverse of the damping time (in seconds^-1).
-    """
+    """  
     
     Inertia_val = Inertia_largest(a, beta)  # grain's moment of inertia
     result = k * temp / (Inertia_val**2 * c**3 * (1+beta)**3)
-    if tumbling and a<a2:
+
+    if beta==0: # spherical grain
+        tumbling = False
+
+    if tumbling:
         # Tumbling disklike grains, SAH10 Eq. (47)
         return result * ((2 * beta**3 / 5 + 8 * beta**2 / 5 + 2*beta + 4/3) * mu_ip**2 + 4 / 3 * mu_op**2) 
     elif beta<=0:
@@ -220,6 +224,9 @@ def log_f_rot(env, a, beta, fZ, mu_ip, mu_op, tumbling=True, omega_min=1e8, omeg
     Inertia_val = Inertia_largest(a, beta)  # Grain's moment of inertia
 
     Tval, nH = env['T'], env['nh']
+
+    if beta==0: # spherical grain
+        tumbling = False
 
     # Characteristic timescales
     tau_H_val = tau_H(Tval, nH, a, beta)
@@ -328,6 +335,10 @@ def f_rot_old(env, a, beta, fZ, mu_ip, mu_op, tumbling=True, omega_min=1e7, omeg
     Returns:
     - Dictionary containing omega and f_a arrays.
     """
+
+    if beta==0: # spherical grain
+        tumbling = False
+
     Nmu = np.size(mu_ip)  # Number of dipole moments
 
     Inertia_val = Inertia_largest(a, beta)  # Grain's moment of inertia

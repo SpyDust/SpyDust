@@ -232,6 +232,9 @@ def FGn(env, a, beta, T_ev, Zg_tab, tumbling=True):
     - Dictionary with Fn and Gn values.
     """
 
+    if beta == 0:
+        tumbling = False
+
     #--- polarizabilities for neutral species : Hydrogen, Helium and H2 ---
 
     a0       = 0.52918e-8      # Bohr radius
@@ -310,6 +313,9 @@ def FGn_averaged(env, a, beta, T_ev, fZ, tumbling=True):
     Returns:
     - Dictionary with averaged Fn and Gn values.
     """
+
+    if beta == 0:
+        tumbling = False
     
     # Call FGn to get Fn and Gn for specific grain charges
     FGn_result = FGn(env, a, beta, T_ev, fZ[0, :], tumbling=tumbling)
