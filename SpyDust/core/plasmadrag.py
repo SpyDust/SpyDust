@@ -793,7 +793,7 @@ def FGp_averaged(env, a, beta, fZ, omega_vec, mu_ip, mu_op, tumbling=True, paral
         I_3 = Inertia_largest(a, beta)
 
         aux =  k*temp / I_3 / omega_vec**2 
-        Fp = 2 * (1 + beta/3) / (1 + beta) * Gp + aux[:, np.newaxis] * Gp        
+        Fp = (1 + beta/3) / (1 + beta) * Gp + aux[:, np.newaxis] * Gp        
         return {'Fp': Fp, 'Gp': Gp}
 
     # Standard spherical grain with K = J
