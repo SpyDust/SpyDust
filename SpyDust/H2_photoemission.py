@@ -1,6 +1,6 @@
-from SpyDust.main.Grain import acx, asurf
-from SpyDust.core.charge_dist import refr_indices, hnu_pdt, hnu_pet, Y, Qabs, sigma_pdt, nu_uisrf, E_min, JPEisrf
-from SpyDust.utils.util import DX_over_X, makelogtab, cgsconst
+from .Grain import acx, asurf
+from .charge_dist import refr_indices, hnu_pdt, hnu_pet, Y, Qabs, sigma_pdt, nu_uisrf, E_min, JPEisrf
+from .util import DX_over_X, makelogtab, cgsconst
 import numpy as np
 
 
