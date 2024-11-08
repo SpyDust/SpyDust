@@ -1,13 +1,13 @@
 import numpy as np
 from scipy.special import kv as beselk
 
-from SpyDust import SpDust_data_dir
-from ..utils.util import cgsconst, makelogtab, maketab, DX_over_X
+from .. import SpDust_data_dir
+from ..util import cgsconst, makelogtab, maketab, DX_over_X
 from .grain_properties import acx
 
 from numba import jit
 import os
-from ..utils.mpiutil import *
+from ..mpiutil import *
 
 
 k = cgsconst.k

@@ -5,5 +5,10 @@ package_version = "1.0"
 
 # Importing submodules for ease of access
 import os
-from .main import *
 SpDust_data_dir = os.path.join(__path__[0], 'Data_Files/')
+#SpDust_data_dir = os.path.join("/home/phil/software/SpyDust/SpyDust", 'Data_Files/')
+
+
+from . import AngMomDist, charge_dist, collisions, free_free, Grain, \
+              H2_photoemission, infrared, mpiutil, plasmadrag, SED, \
+              util

@@ -8,8 +8,8 @@
 
 
 import numpy as np
-from SpyDust import SpDust_data_dir  
-from ..utils.util import cgsconst, makelogtab, DX_over_X, biinterp_func, coord_grid, log_biinterplog
+from .. import SpDust_data_dir  
+from ..util import cgsconst, makelogtab, DX_over_X, biinterp_func, coord_grid, log_biinterplog
 from .grain_properties import asurf, N_C
 from scipy.interpolate import interp1d    
 import os      

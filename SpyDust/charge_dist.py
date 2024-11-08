@@ -8,10 +8,10 @@
 
 
 import numpy as np
-from SpyDust import SpDust_data_dir  
-from SpyDust.utils.util import cgsconst, makelogtab, DX_over_X, biinterp_func, coord_grid
-from SpyDust.utils.mpiutil import *
-from SpyDust.main.Grain import asurf, N_C
+from . import SpDust_data_dir  
+from .util import cgsconst, makelogtab, DX_over_X, biinterp_func, coord_grid
+from .mpiutil import *
+from .Grain import asurf, N_C
 from scipy.interpolate import interp1d    
 import os      
 from numba import njit, jit

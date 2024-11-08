@@ -1,5 +1,5 @@
-from SpyDust import SpDust_data_dir
-from ..utils.util import cgsconst, DX_over_X, maketab, makelogtab 
+from .. import SpDust_data_dir
+from ..util import cgsconst, DX_over_X, maketab, makelogtab 
 from .grain_properties import acx, Inertia, grainparams, rms_dipole, size_dist
 from .charge_dist import charge_dist
 from .infrared import FGIR_averaged

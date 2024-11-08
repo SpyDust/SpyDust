@@ -1,13 +1,13 @@
 import numpy as np
-from SpyDust.utils.util import cgsconst, makelogtab, DX_over_X
-from SpyDust.main.Grain import acx, Inertia_largest, grainparams
-from SpyDust.core.infrared import FGIR_averaged
-from SpyDust.core.collisions import Tev_effective, FGn_averaged, FGi_averaged
-from SpyDust.core.plasmadrag import FGp_averaged
-from SpyDust.core.H2_photoemission import GH2, FGpe_averaged
+from .util import cgsconst, makelogtab, DX_over_X
+from .Grain import acx, Inertia_largest, grainparams
+from .infrared import FGIR_averaged
+from .collisions import Tev_effective, FGn_averaged, FGi_averaged
+from .plasmadrag import FGp_averaged
+from .H2_photoemission import GH2, FGpe_averaged
 
 # To compare with the old plasma drag calculation in SpDust
-from ..SPDUST_as_is import plasmadrag as spd_plasmadrag
+from .SPDUST_as_is import plasmadrag as spd_plasmadrag
 from scipy.interpolate import interp1d
 
 from numba import njit, jit
