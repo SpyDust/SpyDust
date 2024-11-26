@@ -748,7 +748,7 @@ def Gp_per_mu2_averaged(temp, xh, xC, a, beta, fZ, omega_vec):
     return Gp_over_mu2
 
 
-def FGp_averaged(env, a, beta, fZ, omega_vec, mu_ip, mu_op, tumbling=True, parallel=False):
+def FGp_averaged(env, a, beta, fZ, omega_vec, mu_ip, mu_op, tumbling=True):
     """
     Returns a structure {Fp, Gp} with each element as an array of dimensions [Nomega, Nmu].
     (Averaged over grain charges.)
@@ -777,23 +777,27 @@ def FGp_averaged(env, a, beta, fZ, omega_vec, mu_ip, mu_op, tumbling=True, paral
     if tumbling:
         # Disklike tumbling grain 
         ## Corr: omega could be a vector
-        def Gp_vals(omega_ind):
+        def Gp_Fp_vals(omega_ind):
             omega = omega_vec[omega_ind]
             cos_theta_list = maketab(-1, 1, 21)
-            Omega_G_arr = np.absolute(omega  * (1 - beta * cos_theta_list) / (1+beta) )
-            weight = (1 - cos_theta_list)**2 / 4
-            result = Gp_per_mu2_averaged(temp, xh, xC, a, beta, fZ, Omega_G_arr)
-            result = 2*np.average(result*weight) *  mu_ip_2 + Gp_op[omega_ind] * mu_op_2 
-            return result
+            Omega_arr = np.absolute(omega  * (1 - beta * cos_theta_list) / (1+beta) )
+            weight_Gp = (1 - cos_theta_list)**2 / 4
+            weight_Fp = - weight_Gp * cos_theta_list
+            aux_result = Gp_per_mu2_averaged(temp, xh, xC, a, beta, fZ, Omega_arr)
+            result_Gp = 2*np.average(aux_result*weight_Gp) *  mu_ip_2 + Gp_op[omega_ind] * mu_op_2 
+            result_Fp = result_Gp/(1+beta) + (beta/(1+beta)) * 2*np.average(aux_result*weight_Fp) *  mu_ip_2 
+            return result_Gp, result_Fp
         
-        if parallel:
-            Gp = np.array(parallel_map(Gp_vals, np.arange(Nomegas))).reshape(Nomegas, -1)
-        else:
-            Gp = np.array([Gp_vals(ind) for ind in np.arange(Nomegas)]).reshape(Nomegas, -1)
-        I_3 = Inertia_largest(a, beta)
+        Gp, Fp = [], []
 
-        aux =  k*temp / I_3 / omega_vec**2 
-        Fp = (1 + beta/3) / (1 + beta) * Gp + aux[:, np.newaxis] * Gp        
+        for ind in np.arange(Nomegas):
+            Gp_vals, Fp_vals = Gp_Fp_vals(ind)
+            Gp.append(Gp_vals)
+            Fp.append(Fp_vals)
+
+        Gp = np.array(Gp).reshape(Nomegas, -1)
+        Fp = np.array(Fp).reshape(Nomegas, -1)
+       
         return {'Fp': Fp, 'Gp': Gp}
 
     # Standard spherical grain with K = J
@@ -802,4 +806,5 @@ def FGp_averaged(env, a, beta, fZ, omega_vec, mu_ip, mu_op, tumbling=True, paral
     Fp = Gp
 
     return {'Fp': Fp, 'Gp': Gp}
+
 
