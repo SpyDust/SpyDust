@@ -666,8 +666,6 @@ def little_gp_charged_interpol(psi_arr, Omega_arr):
 
     return gp_charged
 
-
-
 def little_gp_neutral_interpol(phi, Omega_arr):
     """
     Parameters:
