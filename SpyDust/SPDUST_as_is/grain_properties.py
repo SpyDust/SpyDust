@@ -2,7 +2,6 @@ import numpy as np
 from scipy.special import erf
 from .. import SpDust_data_dir
 from ..util import cgsconst
-from numba import njit
 import os
 
 

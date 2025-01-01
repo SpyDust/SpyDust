@@ -2,7 +2,6 @@ from .util import cgsconst, makelogtab, DX_over_X
 from scipy.special import erf
 from . import SpDust_data_dir
 import numpy as np
-#from numba import njit
 import os
 
 class grainparams:
