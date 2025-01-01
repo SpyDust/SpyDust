@@ -9,7 +9,7 @@ from .. import SpDust_data_dir
 from ..util import maketab, DX_over_X, cgsconst, makelogtab
 from .grain_properties import N_C, N_H, Inertia, acx, grainparams
 from .charge_dist import Qabs, nu_uisrf, Qabstabs
-from numba import jit, njit
+#from numba import jit, njit
 import os
 from ..mpiutil import *
 
@@ -43,7 +43,7 @@ Energy_tab_max = np.max(Qabstabs.Qabs_hnu_tab) # Maximum energy (eV) in the Qabs
 print(f"Maximum energy in the Qabs_hnu_tab is {Energy_tab_max:.2f} eV.")
 
 
-@njit
+#@njit
 def f2(x):
     """
     Compute f2(x) as per DL01 Eq. (10). x can be an array.
@@ -87,7 +87,7 @@ def f2(x):
 
     return result
 
-@njit
+#@njit
 def Energy_modes(a):
     Nc = N_C(a)
     Nm = (Nc - 2) * np.array([1, 2])  # Number of out-of-plane and in-plane modes
@@ -127,7 +127,7 @@ def Energy_modes(a):
     return Eop_tab[1:], Eip_tab[1:], CH_modes
     #return {'op': Eop_tab[1:], 'ip': Eip_tab[1:], 'CH': CH_modes}
 
-@njit
+#@njit
 def EPAH(a, T, Energy_modes_op, Energy_modes_ip, Energy_modes_CH):
     """
     Compute the average energy E_PAH(a, T) in the thermal approximation.
@@ -205,7 +205,7 @@ def EPAH(a, T, Energy_modes_op, Energy_modes_ip, Energy_modes_CH):
 
         return Eop_bar + Eip_bar + E_Hmodes
 
-@jit
+#@jit
 def Temp(a, Energy, Energy_modes_op, Energy_modes_ip, Energy_modes_CH):
     Tmin = 1.0
     Tmax = 1.0e4
@@ -248,7 +248,7 @@ def Temp(a, Energy, Energy_modes_op, Energy_modes_ip, Energy_modes_CH):
 
     return Temperature
 
-@njit
+#@njit
 def Energy_bins(a, Energy_modes_op, Energy_modes_ip, Energy_modes_CH, M, Energy_max):
     """
     Returns an array E_tab containing the central, minimum, and maximum values

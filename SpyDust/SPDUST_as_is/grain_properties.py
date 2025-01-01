@@ -24,12 +24,12 @@ epsilon = grainparams.epsilon
 
 
 # Number of carbon atoms in a grain
-@njit
+#@njit
 def N_C(a):
     return int(np.floor(4 * pi / 3 * a**3 * rho / (12 * mp)) + 1)
 
 # Number of hydrogen atoms in a grain
-@njit
+#@njit
 def N_H(a):
     Nc = N_C(a)
     if Nc < 25:
@@ -41,7 +41,7 @@ def N_H(a):
     return int(result)
 
 # Largest moment of inertia
-@njit
+#@njit
 def Inertia(a):
     Mass = (12 * N_C(a) + N_H(a)) * mp
     Isphere = 0.4 * Mass * a**2
@@ -52,7 +52,7 @@ def Inertia(a):
         return Isphere
 
 # Surface-equivalent radius
-@njit
+#@njit
 def asurf(a):
     if a <= a2:
         b = np.sqrt(4 / 3 * a**3 / d)
@@ -61,7 +61,7 @@ def asurf(a):
         return a
 
 # Cylindrical excitation equivalent radius
-@njit
+#@njit
 def acx(a):
     if a <= a2:
         R = np.sqrt(4 / 3 * a**3 / d)
@@ -70,7 +70,7 @@ def acx(a):
         return a
 
 # Root mean square dipole moment
-@njit
+#@njit
 def rms_dipole(a, Z2, beta):
     muZ = epsilon * np.sqrt(Z2) * q * acx(a)
     N_at = N_C(a) + N_H(a)

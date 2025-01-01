@@ -2,7 +2,7 @@ from .util import cgsconst, makelogtab, DX_over_X
 from scipy.special import erf
 from . import SpDust_data_dir
 import numpy as np
-from numba import njit
+#from numba import njit
 import os
 
 class grainparams:
@@ -22,12 +22,12 @@ mp = cgsconst.mp
 q = cgsconst.q
 
 # Number of carbon atoms in a grain
-@njit
+#@njit
 def N_C(a):
     return int(np.floor(4 * pi / 3 * a**3 * rho / (12 * mp)) + 1)
 
 # Number of hydrogen atoms in a grain
-@njit
+#@njit
 def N_H(a):
     Nc = N_C(a)
     if Nc < 25:
@@ -38,14 +38,14 @@ def N_H(a):
         result = np.floor(0.25 * Nc + 0.5)
     return int(result)
     
-@njit
+#@njit
 def Inertia_z(I_ref, beta):
     """
     Calculate the moment of inertia around the z-axis. Also notated as I_3.
     """
     return I_ref / (1 + beta)
     
-@njit    
+#@njit    
 def grain_mass(a):
     """"
     Calculate the mass of the grain given the effective radius. (Functions below will define the effective radius)
@@ -58,7 +58,7 @@ def grain_mass(a):
     return (12 * N_C(a) + N_H(a)) * mp
 
 ########################################### Functions for cylindrical type grains ###########################################
-@njit
+#@njit
 def effective_radius_cylindrical(I_ref, beta):
     '''
     Calculate the effective radius of an elliptical cylinder grain.
@@ -66,7 +66,7 @@ def effective_radius_cylindrical(I_ref, beta):
     result = (9 / 4*pi*rho) * I_ref / (1 + beta) * (beta + 0.5)**(1/3)
     return result**(1/5)
 
-@njit
+#@njit
 def Inertia_ref_cylindrical(a, beta):
     '''
     Calculate the reference moment of inertia.
@@ -76,7 +76,7 @@ def Inertia_ref_cylindrical(a, beta):
     real_rho = mass / (4/3 * pi * a**3)
     return a**5 * 4 * pi * real_rho / aux 
 
-@njit
+#@njit
 def cylindrical_radius(a, beta):
     '''
     Calculate the radius of the cylindrical grain in the plane spaned by grain body axes 1 and 2.
@@ -86,7 +86,7 @@ def cylindrical_radius(a, beta):
     I_ref = Inertia_ref_cylindrical(a, beta)
     return np.sqrt( 2 * Inertia_z(I_ref, beta) / mass )
 
-@njit
+#@njit
 def cylindrical_thickness(a, beta):
     """
     Calculate the thickness of the cylindrical grain.
@@ -97,7 +97,7 @@ def cylindrical_thickness(a, beta):
     result = (2 * I_ref - Inertia_z(I_ref, beta)) * 6 / mass
     return np.sqrt(result)
 
-@njit
+#@njit
 def cylindrical_params(a, d_val):
     '''
     Given the effective radius (a) and thickness (d), calculate the I_ref and beta
@@ -109,14 +109,14 @@ def cylindrical_params(a, d_val):
     beta = I_ref / I_z - 1
     return I_ref, beta
 
-@njit
+#@njit
 def beta_min(a):
     '''
     Calculate the minimum value of beta for a cylindrical grain, assuming the thinest disk-like grain - single .
     '''
     return cylindrical_params(a, d)[1]
 
-@njit
+#@njit
 def asurf_cylindrical(a, beta):
     ''''
     Calculate the surface-equivalent radius for cylindrical grains.
@@ -125,7 +125,7 @@ def asurf_cylindrical(a, beta):
     d_val = cylindrical_thickness(a, beta)
     return np.sqrt(b_val**2 / 2 + b_val * d_val / 2)
 
-@njit
+#@njit
 def acx_cylindrical(a, beta):
     '''
     Calculate the cylindrical excitation equivalent radius for cylindrical grains. Assume thin disk-like grains.
@@ -134,7 +134,7 @@ def acx_cylindrical(a, beta):
 
 
 ########################################### Functions for ellipsoid grains ###########################################
-@njit
+#@njit
 def effective_radius_ellipsoidal(I_ref, beta):
     '''
     Calculate the effective radius of an ellipsoidal grain.
@@ -142,7 +142,7 @@ def effective_radius_ellipsoidal(I_ref, beta):
     result = (15 * I_ref / 8*pi*rho) / (1 + beta) * (2 * beta + 1)**(1/3)
     return result**(1/5)
 
-@njit
+#@njit
 def Inertia_ref_ellipsoidal(a, beta):
     '''
     Calculate the reference moment of inertia.
@@ -152,7 +152,7 @@ def Inertia_ref_ellipsoidal(a, beta):
     real_rho = mass / (4/3 * pi * a**3)
     return a**5 * 8 * pi * real_rho / aux
 
-@njit
+#@njit
 def radii_ellipsoidal(a, beta):
     '''
     Calculate the radii of the ellipsoidal grain.
@@ -168,7 +168,7 @@ def radii_ellipsoidal(a, beta):
 
     return r_1, r_2, r_3
 
-@njit
+#@njit
 def asurf_ellipsoidal(a, beta):
     ''''
     Calculate the surface-equivalent radius for ellipsoidal grains.
@@ -188,7 +188,7 @@ def asurf_ellipsoidal(a, beta):
         asurf = np.sqrt(surface / (4 * pi))
         return asurf
 
-@njit
+#@njit
 def acx_ellipsoidal(a, beta):
     '''
     Calculate the excitation equivalent radius for ellipsoidal grains.
@@ -200,7 +200,7 @@ def acx_ellipsoidal(a, beta):
 ########################################### Functions for general grains ###########################################
 # Assume cylindrical grains for a < a2 and ellipsoidal grains for a > a2
 
-@njit
+#@njit
 def Inertia_ref(a, beta):
     '''
     Calculate the reference moment of inertia.
@@ -210,7 +210,7 @@ def Inertia_ref(a, beta):
     else:
         return Inertia_ref_ellipsoidal(a, beta)
     
-@njit
+#@njit
 def asurf(a, beta):
     '''
     Calculate the surface-equivalent radius for general grains.
@@ -220,7 +220,7 @@ def asurf(a, beta):
     else:
         return asurf_ellipsoidal(a, beta)
     
-@njit
+#@njit
 def acx(a, beta):
     '''
     Calculate the excitation equivalent radius for general grains.
@@ -230,7 +230,7 @@ def acx(a, beta):
     else:
         return acx_ellipsoidal(a, beta)
     
-@njit
+#@njit
 def Inertia_largest(a, beta):
     '''
     Calculate the largest moment of inertia.
@@ -243,7 +243,7 @@ def Inertia_largest(a, beta):
     else:
         return I_ref
     
-@njit
+#@njit
 def rms_dipole(a, beta, Z2, mole_dipole):
     '''
     Calculate the root mean square dipole moment.
@@ -270,7 +270,7 @@ class size_dist_arrays:
     bc1e5_tab, alpha_tab, beta_tab, at_tab, ac_tab, C_tab = \
     np.loadtxt(size_dist_file, usecols=(1, 3, 4, 5, 6, 7), unpack=True, comments=';')
 
-@njit
+#@njit
 def apodized_Gaussian_dist(x, centre, sigma, right_half = False):
     '''
     An auxiliary Gaussian distribution apodized by a cosine function.
@@ -318,7 +318,7 @@ class grain_distribution():
         Bi = 3 / (2 * np.pi)**1.5 * np.exp(-4.5 * sigma**2) / (
                 rho * a0i**3 * sigma) * bci * mc / (1 + erf(3 * sigma / np.sqrt(2) + np.log(a0i / amin) / (sigma * np.sqrt(2))))
         
-        @njit
+        #@njit
         def size_dist(a):
             '''
             Grain size distribution, using Weingartner & Draine, 2001a prescription. 
@@ -341,7 +341,7 @@ class grain_distribution():
         return size_dist
 
     @staticmethod
-    @njit
+    #@njit
     def shape_dist(a, beta_tab):
         '''
         A toy model for the distribution of the grain shape parameter, beta. 
@@ -368,7 +368,7 @@ class grain_distribution():
 
     
     @staticmethod
-    @njit 
+    #@njit 
     def shape_dist_fixed_thickness(a, beta_tab):
         '''
         The distribution of the grain shape parameter, beta, if we fix the thickness of the disk as d. 

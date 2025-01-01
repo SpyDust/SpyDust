@@ -6,7 +6,6 @@ from .infrared import Temp, Energy_modes, IR_arrays
 
 import numpy as np
 from scipy.special import erf
-from numba import jit
 import os
 
 
