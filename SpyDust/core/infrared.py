@@ -9,7 +9,7 @@ from SpyDust import SpDust_data_dir
 from SpyDust.utils.util import maketab, DX_over_X, cgsconst, makelogtab
 from SpyDust.main.Grain import N_C, N_H, Inertia_largest, acx, grainparams
 from SpyDust.core.charge_dist import Qabs, nu_uisrf, Qabstabs
-from numba import jit, njit
+#from numba import jit, njit
 import os
 from SpyDust.utils.mpiutil import *
 
@@ -43,7 +43,7 @@ Energy_tab_max = np.max(Qabstabs.Qabs_hnu_tab) # Maximum energy (eV) in the Qabs
 
 
 
-@njit
+#@njit
 def f2(x):
     """
     Compute f2(x) as per DL01 Eq. (10). x can be an array.
@@ -67,17 +67,17 @@ def f2(x):
     y_over_x = np.outer(y, 1.0 / x)
 
     # Find the indices where y_over_x < 500
-    # ind = y_over_x < 500
+    ind = y_over_x < 500
 
     # Compute the integrand at the valid indices
-    # if np.any(ind):
-    #    integrand[ind] = 1.0 / (np.exp(y_over_x[ind]) - 1.0)
+    if np.any(ind):
+       integrand[ind] = 1.0 / (np.exp(y_over_x[ind]) - 1.0)
 
     # Use loops for njit compatibility
-    for i in range(Ny):
-        for j in range(Nx):
-            if y_over_x[i, j] < 500:
-                integrand[i, j] = 1.0 / (np.exp(y_over_x[i, j]) - 1.0)
+    #for i in range(Ny):
+    #    for j in range(Nx):
+    #        if y_over_x[i, j] < 500:
+    #            integrand[i, j] = 1.0 / (np.exp(y_over_x[i, j]) - 1.0)
 
     # Multiply by y^2
     integrand *= (y[:, np.newaxis]**2) 
@@ -87,7 +87,7 @@ def f2(x):
 
     return result
 
-@njit
+#@njit
 def Energy_modes(a):
     Nc = N_C(a)
     Nm = (Nc - 2) * np.array([1, 2])  # Number of out-of-plane and in-plane modes
@@ -127,7 +127,7 @@ def Energy_modes(a):
     return Eop_tab[1:], Eip_tab[1:], CH_modes
     #return {'op': Eop_tab[1:], 'ip': Eip_tab[1:], 'CH': CH_modes}
 
-@njit
+#@njit
 def EPAH(a, T, Energy_modes_op, Energy_modes_ip, Energy_modes_CH):
     """
     Compute the average energy E_PAH(a, T) in the thermal approximation.
@@ -153,14 +153,16 @@ def EPAH(a, T, Energy_modes_op, Energy_modes_ip, Energy_modes_CH):
     E_over_kT = Energy_modes_CH[:, None] / (k * T)  # Broadcasting to divide CH modes by k*T
 
     # Avoid floating point overflow for large E_over_kT values
-    # mask = E_over_kT < 600
-    # E_Hmodes[mask] = 1.0 / (np.exp(E_over_kT[mask]) - 1.0)
+    mask = E_over_kT < 600
+    E_Hmodes[mask] = 1.0 / (np.exp(E_over_kT[mask]) - 1.0)
 
     # Use loops for njit compatibility
+    """ 
     for i in range(E_over_kT.shape[0]):
         for j in range(E_over_kT.shape[1]):
             if E_over_kT[i, j] < 600:
-                E_Hmodes[i, j] = 1.0 / (np.exp(E_over_kT[i, j]) - 1.0)
+                E_Hmodes[i, j] = 1.0 / (np.exp(E_over_kT[i, j]) - 1.0) 
+    """
 
     # Multiply by CH modes to get total energy in these modes
     E_Hmodes = (Energy_modes_CH[:, None] * np.ones(NT)) * E_Hmodes
@@ -174,14 +176,16 @@ def EPAH(a, T, Energy_modes_op, Energy_modes_ip, Energy_modes_CH):
         Eop_temp = np.zeros((np.size(Eop_tab), NT))
         E_over_kT = Eop_tab[:, None] / (k * T)
 
-        #mask = E_over_kT < 600
-        #Eop_temp[mask] = 1.0 / (np.exp(E_over_kT[mask]) - 1.0)
+        mask = E_over_kT < 600
+        Eop_temp[mask] = 1.0 / (np.exp(E_over_kT[mask]) - 1.0)
 
         # Use loops for njit compatibility
+        """ 
         for i in range(E_over_kT.shape[0]):
             for j in range(E_over_kT.shape[1]):
                 if E_over_kT[i, j] < 600:
-                    Eop_temp[i, j] = 1.0 / (np.exp(E_over_kT[i, j]) - 1.0)
+                    Eop_temp[i, j] = 1.0 / (np.exp(E_over_kT[i, j]) - 1.0) 
+        """
 
         Eop_temp = (Eop_tab[:, None] * np.ones(NT)) * Eop_temp
         Eop_bar = np.sum(Eop_temp, axis=0)
@@ -191,21 +195,22 @@ def EPAH(a, T, Energy_modes_op, Energy_modes_ip, Energy_modes_CH):
         Eip_temp = np.zeros((np.size(Eip_tab), NT))
         E_over_kT = Eip_tab[:, None] / (k * T)
 
-        #mask = E_over_kT < 600
-        #Eip_temp[mask] = 1.0 / (np.exp(E_over_kT[mask]) - 1.0)
+        mask = E_over_kT < 600
+        Eip_temp[mask] = 1.0 / (np.exp(E_over_kT[mask]) - 1.0)
 
         # Use loops for njit compatibility
+        """ 
         for i in range(E_over_kT.shape[0]):
             for j in range(E_over_kT.shape[1]):
                 if E_over_kT[i, j] < 600:
                     Eip_temp[i, j] = 1.0 / (np.exp(E_over_kT[i, j]) - 1.0)
-
+        """
         Eip_temp = (Eip_tab[:, None] * np.ones(NT)) * Eip_temp
         Eip_bar = np.sum(Eip_temp, axis=0)
 
         return Eop_bar + Eip_bar + E_Hmodes
 
-@jit
+#@jit
 def Temp(a, Energy, Energy_modes_op, Energy_modes_ip, Energy_modes_CH):
     Tmin = 1.0
     Tmax = 1.0e4
@@ -233,18 +238,20 @@ def Temp(a, Energy, Energy_modes_op, Energy_modes_ip, Energy_modes_CH):
         hbar_omega20 = np.min(modes)
         modes[np.argmin(modes)] = 2 * np.max(modes)
 
-    # ind = np.where(Energy <= hbar_omega20)
-    # if len(ind[0]) > 0:
-    #     Temperature[ind] = hbar_omega1 / (k * np.log(2.0))
+    ind = np.where(Energy <= hbar_omega20)
+    if len(ind[0]) > 0:
+        Temperature[ind] = hbar_omega1 / (k * np.log(2.0))
 
     # Use loops for njit compatibility
+    """ 
     for i in range(len(Energy)):
         if Energy[i] <= hbar_omega20:
-            Temperature[i] = hbar_omega1 / (k * np.log(2.0))
+            Temperature[i] = hbar_omega1 / (k * np.log(2.0)) 
+    """
 
     return Temperature
 
-@njit
+#@njit
 def Energy_bins(a, Energy_modes_op, Energy_modes_ip, Energy_modes_CH, M, Energy_max):
     """
     Returns an array E_tab containing the central, minimum, and maximum values

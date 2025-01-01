@@ -13,7 +13,7 @@ from ..utils.util import cgsconst, makelogtab, DX_over_X, biinterp_func, coord_g
 from .grain_properties import asurf, N_C
 from scipy.interpolate import interp1d    
 import os      
-from numba import njit, jit
+#from numba import njit, jit
 
 
 class paramjpe:
@@ -46,13 +46,13 @@ W = paramjpe.W
 pi = cgsconst.pi
 
 # Equation (2), in eV
-@njit
+#@njit
 def IPv(Z, a):
     return W + ((Z + 0.5) * q**2 / a + (Z + 2) * q**2 / a * (0.3e-8) / a) / eV
 
 
 # Equation (7), in eV
-@njit
+#@njit
 def E_min(Z, a):
     if Z < -1:
         return -(Z + 1) * q**2 / a / (1 + (27e-8 / a)**0.75) / eV
@@ -60,7 +60,7 @@ def E_min(Z, a):
         return 0.0
 
 # Equation (6), in eV
-@njit
+#@njit
 def hnu_pet(Z, a):
     if Z >= -1:
         return max(0.0, IPv(Z, a))
@@ -68,7 +68,7 @@ def hnu_pet(Z, a):
         return max(0.0, IPv(Z, a) + E_min(Z, a))
     
 # Equation (9), in eV
-@njit
+#@njit
 def theta(hnu_tab_aux, Z, a):
  
     hnu_pet_result = hnu_pet(Z, a)
@@ -79,7 +79,7 @@ def theta(hnu_tab_aux, Z, a):
         return hnu_tab_aux - hnu_pet_result
     
 # Equation (11) and preceding paragraph
-@njit
+#@njit
 def y2(hnu_tab_aux, Z, a):
     Nnu = len(hnu_tab_aux)
     y2_tab = np.zeros(Nnu)
@@ -101,7 +101,6 @@ def y2(hnu_tab_aux, Z, a):
 
     return y2_tab
 
-#@jit(nopython=False)
 def l_a():
     """
     Stores la(hnu) needed for equation (15) of WD01b.    
@@ -143,7 +142,7 @@ refr_indices.hnu_tab = hnu_tab
 refr_indices.la_tab = la_tab 
  
 # Takes care of small beta case in eq (13)
-@njit
+#@njit
 def fy1(x):
     """
     Takes care of small beta case as described in equation (13).
@@ -174,7 +173,7 @@ def fy1(x):
     return result
 
 # Equation (13) in WD01b
-@njit
+#@njit
 def y1(a):
     l_e = 1e-7  # electron escape length in cm
 
@@ -184,12 +183,12 @@ def y1(a):
     return fy1(alpha) / fy1(beta)
 
 # Equation (16) in WD01b
-@njit
+#@njit
 def y0(theta_val):
     return 9e-3 * (theta_val / W)**5 / (1 + 3.7e-2 * (theta_val / W)**5)
 
 # Equation (12) for hnu values in hnu_tab
-@njit
+#@njit
 def Y(Z, a):
     N_hnu = len(hnu_tab)
     Y_result = np.zeros(N_hnu)
@@ -212,11 +211,11 @@ def Y(Z, a):
     return Y_result
 
 # Planck function for nu in Hz 
-@njit
+#@njit
 def Planck_B(nu, T):
     return 2.0 * h * nu**3 / c**2 / (np.exp(h * nu / (k * T)) - 1.0)
 
-@njit
+#@njit
 def nu_uisrf(hnu_tab_aux):
     """
     ; ---> Average interstellar radiation field spectrum nu*u_nu
@@ -340,17 +339,17 @@ def Qabs(a, Z, hnu_tab_aux):
     return Qtab
 
 # Equation (4) in eV for Z < 0
-@njit
+#@njit
 def EA(Z, a):
     return W + ((Z - 0.5) * q**2 / a - q**2 / a * 4e-8 / (a + 7e-8)) / eV
 
 # Equation (18) in eV for Z < 0
-@njit
+#@njit
 def hnu_pdt(Z, a):
     return max(0, EA(Z + 1, a) + E_min(Z, a))  
 
 # Equation (20) in cm^2, for Z < 0
-@njit
+#@njit
 def sigma_pdt(hnu_tab_aux, Z, a):
     DeltaE = 3.0  # in eV
     x = (hnu_tab_aux - hnu_pdt(Z, a)) / DeltaE
@@ -390,7 +389,7 @@ def first_term(Z, a):
     return c * pi * a**2 * Dnu_over_nu * np.sum(Ytab * Qtab * utab / (hnu * eV))
 
 # Second term in eq (25) for the standard interstellar radiation field (31), for Z < 0
-@njit
+#@njit
 def second_term(Z, a):
 
     hnu_min = max([1e-5, hnu_pdt(Z, a)])
@@ -415,7 +414,7 @@ def Jpe(Z, a):
     return first_term(Z, a) + second_term(Z, a)
 
 # Equation (22)
-@njit
+#@njit
 def Zmax(a):
     aA = a / 1e-8  # a in A
 
@@ -424,7 +423,7 @@ def Zmax(a):
     return int(result)
 
 # Equations (23), (24)
-@njit
+#@njit
 def Zmin(a):
     aA = a / 1e-8  # a in A
     U_ait = -(3.9 + 0.12 * aA + 2 / aA)
@@ -487,7 +486,7 @@ a_values, Jpe_pos_isrf, Jpe_neg_isrf = JPEisrf_calc()
 
 
 # Function to interpolate Jpe arrays
-@jit
+#@jit
 def JPEisrf(a):
     #a_values, Jpe_pos_isrf, Jpe_neg_isrf = jpe_arrays.a_values, jpe_arrays.Jpe_pos_isrf, jpe_arrays.Jpe_neg_isrf
 
@@ -523,7 +522,7 @@ def JPEisrf(a):
     return Jpepos, Jpeneg
 
 # Function to calculate Jtilde
-@njit
+#@njit
 def Jtilde(tau, nu):
 
     if nu == 0:
@@ -545,7 +544,7 @@ def Jtilde(tau, nu):
 # Equations refer to WD01b
 # Note that s_i = 1 for ions
 
-@njit
+#@njit
 def se(Z, a):
     l_e = 1e-7  # "electron escape length" (10 A) see below (28)
     Nc = N_C(a)
@@ -561,7 +560,7 @@ def se(Z, a):
         return 0.5 * (1.0 - np.exp(-a / l_e))  # (30)
 
 # Function to calculate J_ion
-@njit
+#@njit
 def J_ion_aux(nh, T, xh, xc, Z, a):
     asurf_val = asurf(a)  
     tau = asurf_val * k * T / q**2
@@ -576,7 +575,7 @@ def J_ion(env, Z, a):
     return J_ion_aux(nh, T, xh, xc, Z, a)
 
 # Function to calculate J_electron
-@njit
+#@njit
 def J_electron_aux(nh, T, xh, xc, Z, a):
     asurf_val = asurf(a)  
     tau = asurf_val * k * T / q**2
@@ -591,7 +590,7 @@ def J_electron(env, Z, a):
     return J_electron_aux(nh, T, xh, xc, Z, a) 
 
 # Function to compute charge distribution
-@jit
+#@jit
 def charge_dist_aux(Chi, nh, T, xh, xc, a):
     Z_min = Zmin(a) 
     Z_max = Zmax(a)  
