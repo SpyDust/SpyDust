@@ -1,0 +1,74 @@
+# This workflow uploads a Python package to PyPI when a release is created.
+# For more details, visit: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python#publishing-to-package-registries
+
+name: Publish Python Package
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  release-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout the repository
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Step 2: Set up Python
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      # Step 3: Install dependencies and build the package
+      - name: Build release distributions
+        run: |
+          # Install build tools
+          python -m pip install --upgrade pip build
+          # Build the source and wheel distributions
+          python -m build
+
+      # Step 4: Upload the build artifacts for use in subsequent jobs
+      - name: Upload distributions
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-dists
+          path: dist/
+
+  pypi-publish:
+    runs-on: ubuntu-latest
+    needs:
+      - release-build
+    permissions:
+      # Mandatory for trusted publishing to PyPI
+      id-token: write
+
+    # Environments with protections for publishing are recommended
+    # For more info, visit:
+    # https://docs.github.com/en/actions/deployment/targeting-different-environments/using-environments-for-deployment#deployment-protection-rules
+    environment:
+      name: pypi
+      # OPTIONAL: Uncomment and update the following line to include your PyPI project URL in deployment status:
+      # url: https://pypi.org/project/YOUR_PROJECT_NAME
+
+    steps:
+      # Step 5: Download the previously built distributions
+      - name: Retrieve release distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: release-dists
+          path: dist/
+
+      # Step 6: Publish the package to PyPI
+      - name: Publish release distributions to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}

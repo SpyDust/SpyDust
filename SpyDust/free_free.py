@@ -1,7 +1,8 @@
-from SpyDust import SpDust_data_dir
-from SpyDust.utils.util import cgsconst
-import numpy as np
+from . import SpDust_data_dir
+from .util import cgsconst
 
+import numpy as np
+import pandas as pd
 
 pi = np.pi
 c = cgsconst.c
