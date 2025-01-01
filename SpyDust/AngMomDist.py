@@ -10,7 +10,7 @@ from .H2_photoemission import GH2, FGpe_averaged
 from .SPDUST_as_is import plasmadrag as spd_plasmadrag
 from scipy.interpolate import interp1d
 
-from numba import njit, jit
+#from numba import njit, jit
 
 c = cgsconst.c
 mp = cgsconst.mp
@@ -22,7 +22,7 @@ a2 = grainparams.a2
 
 
 # Function to calculate the characteristic damping time through collisions with neutral H atoms
-@njit
+# @njit
 def tau_H(temp, nh, a, beta):
     """
     Returns the characteristic damping time through collisions with neutral H atoms.
@@ -44,7 +44,7 @@ def tau_H(temp, nh, a, beta):
     # Calculate tau_H using the given equation
     return 1.0 / (nh * mp * np.sqrt(2 * k * temp / (pi * mp)) * 4 * pi * acx_val**4 / (3 * Inertia_val))
 
-@njit
+# @njit
 def dissipation_vec_ed( L_val, theta_b, beta, mu_abs, ip, I_ref):
     '''
     Calculate the angular momentum dissipation rate for the back-reaction of the electric dipole radiation.
@@ -78,7 +78,7 @@ def dissipation_vec_ed( L_val, theta_b, beta, mu_abs, ip, I_ref):
     result = - (1/3) * ( mu_perp_2 * aux_perp + mu_parallel_2 * aux_parallel ) * (L_val / (I_ref * c)) ** 3
     return result
 
-@njit
+# @njit
 def dissipation_rate_ed_theta_avrg( L_val, beta, mu_abs, ip, I_ref):
     '''
     Calculate the ed angular momentum dissipation rate, averaging over nutation angle.
@@ -95,7 +95,7 @@ def dissipation_rate_ed_theta_avrg( L_val, beta, mu_abs, ip, I_ref):
 
 
 # Function to calculate the inverse of the characteristic damping time through electric dipole radiation
-@njit
+# @njit
 def tau_ed_inv(temp, a, beta, mu_ip, mu_op, tumbling=True):
     """
     Returns the inverse of the characteristic damping time through electric dipole radiation.
@@ -131,7 +131,7 @@ def tau_ed_inv(temp, a, beta, mu_ip, mu_op, tumbling=True):
 
 
 # Manually implemented cumulative sum function
-@njit
+# @njit
 def cumsum_axis_0(arr):
     result = np.zeros_like(arr)
     result[0] = arr[0]
@@ -139,7 +139,7 @@ def cumsum_axis_0(arr):
         result[i] = result[i-1] + arr[i]
     return result
 
-#@njit
+
 def aux_int(Tval, F, G, omega, Nomega, Nmu, tau_H_val, tau_ed_inv_val, Inertia_val, Dln_omega):
 
      # Rotational distribution function, AHD09 Eq.(33)
@@ -179,7 +179,7 @@ def aux_int(Tval, F, G, omega, Nomega, Nmu, tau_H_val, tau_ed_inv_val, Inertia_v
     return log_f_a.T   # shape (Nmu, Nomega)
 
 
-@njit
+# @njit
 def rescale_f_rot(omega, f_a, beta, log=True):
     """
     This function rescales omega in spdust convention to our convention.
@@ -309,9 +309,6 @@ def log_f_rot(env, a, beta, fZ, mu_ip, mu_op, tumbling=True, omega_min=1e8, omeg
         interp_func = interp1d(log_Omega, aux_result_mu, kind='cubic', fill_value='extrapolate')
         result[ind, :] = interp_func(omegaVec_log)
     return result
-
-   
-
 
     
 def f_rot_old(env, a, beta, fZ, mu_ip, mu_op, tumbling=True, omega_min=1e7, omega_max=1e11, Nomega=1000):
