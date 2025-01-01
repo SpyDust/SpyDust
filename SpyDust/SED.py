@@ -1,8 +1,9 @@
-from SpyDust.utils.util import cgsconst, DX_over_X, maketab, makelogtab 
-from SpyDust.utils.mpiutil import *
-from SpyDust.main.Grain import grainparams, rms_dipole
-from SpyDust.core.charge_dist import charge_dist
-from SpyDust.main.AngMomDist import log_f_rot
+from .util import cgsconst, DX_over_X, maketab, makelogtab 
+from .mpiutil import *
+from .Grain import grainparams, rms_dipole
+from .charge_dist import charge_dist
+from .AngMomDist import log_f_rot
+from numba import njit, jit
 
 import numpy as np
 from scipy.interpolate import interp1d

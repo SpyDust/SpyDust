@@ -1,6 +1,6 @@
-from SpyDust.main.Grain import N_C, N_H, grain_distribution
-from SpyDust.utils.util import cgsconst, makelogtab
-from SpyDust.utils.mpiutil import *
+from .Grain import N_C, N_H, grain_distribution
+from .util import cgsconst, makelogtab
+from .mpiutil import *
 import numpy as np
 
 from .SED import mu2_f, SED
