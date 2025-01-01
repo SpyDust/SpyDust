@@ -22,12 +22,14 @@
 
 SpyDust requires Python 3.7 or higher (up to Python 3.9) and the following dependencies:
 
-- `numpy <= 2.0`
+**Required**:
+- `numpy`
 - `scipy`
-- `numba`
 - `logging`
 - `mpi4py`
-- `pandas`
+
+**Optional**:
+- `pandas`: This is not needed for spinning dust spectra, but if free free emission is also desired (using free_free.py), then it is needed.
 
 ---
 
@@ -39,6 +41,8 @@ You can install SpyDust using pip:
 pip install SpyDust
 ```
 
+Otherwise, you can directly `git clone' this repo and set up the environment by yourself.
+
 ---
 
 # Usage
@@ -49,9 +53,19 @@ Import the package in your project and explore its functionalities for modeling 
 
 ## Example usage:
 
+Here is an example of using the `SpyDust.SpyDust' function to generate a spectrum for a sample CNM environment:
 ```python
+CNM_params = {'nh' : 30, 'T': 100., 'Chi': 1, 'xh': 1.2e-3, 'xC': 3e-4, 'y' : 0, 'gamma': 0, 'dipole': 9.3, 'line':7}
 
+min_freq=1 # in GHz
+max_freq=300 # in GHz
+n_freq=500
+
+spectrum = SpyDust.SpyDust(CNM_params, min_freq=min_freq, max_freq=max_freq, n_freq=n_freq, single_beta=True)
+# Here the boolean keyword `single_beta' means: for any given grain size, consider only one value of the shape parameter beta.
 ```
+
+Instead of using the SpyDust rotation distribution method described in the paper, you can generate spectra using your own arbitrary distributions of configuration parameters as inputs to the `SpyDust.SED' function.
 
 --- 
 

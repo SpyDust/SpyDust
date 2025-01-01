@@ -1,7 +1,6 @@
 import numpy as np
 from scipy.interpolate import griddata
 from scipy.interpolate import RegularGridInterpolator
-#from numba import jit, njit
 
 class cgsconst:
     # Stores the needed constants in cgs units

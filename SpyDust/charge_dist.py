@@ -14,7 +14,6 @@ from .mpiutil import *
 from .Grain import asurf, N_C
 from scipy.interpolate import interp1d    
 import os      
-#from numba import njit, jit
 
 
 class paramjpe:
