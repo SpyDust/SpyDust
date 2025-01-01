@@ -57,6 +57,16 @@ Here is an example of using the `SpyDust.SpyDust' function to generate a spectru
 ```python
 CNM_params = {'nh' : 30, 'T': 100., 'Chi': 1, 'xh': 1.2e-3, 'xC': 3e-4, 'y' : 0, 'gamma': 0, 'dipole': 9.3, 'line':7}
 
+The parameters are as follows: 
+# 'nH': total hydrogen number density (cm3), 
+# 'T': gas temperature (K), 
+# 'chi': intensity of the radiation field relative to the average interstellar radiation field, 
+# 'xh': hydrogen ionization fraction, 
+# 'xC': ionized carbon fractional abundance, 
+# 'y': molecular hydrogen fractional abundance, 
+# 'gamma': H2 formation efficiency, 
+# 'dipole': rms dipole moment for dust grains.
+
 min_freq=1 # in GHz
 max_freq=300 # in GHz
 n_freq=500
@@ -82,7 +92,6 @@ Instead of using the SpyDust rotation distribution method described in the paper
 - **Version 1.0.0**: Initial release of SpyDust, introducing comprehensive grain shape modeling, updated physical processes, and degeneracy analysis tools.
 
 ## TODO (Future Versions)
-- Get rid of numba. Use jax instead.
 - Future upgrades will include features such as the SED fitting tool (based on perturbation statistics tools like moment expansion) and improve the treatment of the grain rotation distribution.
 
 ---
