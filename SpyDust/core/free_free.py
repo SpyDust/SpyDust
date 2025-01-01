@@ -1,9 +1,6 @@
 from SpyDust import SpDust_data_dir
 from SpyDust.utils.util import cgsconst
-
 import numpy as np
-
-
 
 
 pi = np.pi

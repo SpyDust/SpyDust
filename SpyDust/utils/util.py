@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.interpolate import griddata
 from scipy.interpolate import RegularGridInterpolator
-from numba import jit, njit
+#from numba import jit, njit
 
 class cgsconst:
     # Stores the needed constants in cgs units
@@ -15,17 +15,17 @@ class cgsconst:
     debye = 1e-18       # 1 Debye in cgs units
     eV = 1.60217653e-12  # 1eV in ergs
 
-@njit
+#@njit
 def maketab(xmin, xmax, Npt):
     """Creates a linearly spaced table."""
     return xmin + (xmax - xmin) / Npt * (0.5 + np.arange(Npt))
 
-@njit
+#@njit
 def makelogtab(xmin, xmax, Npt):
     """Creates a logarithmically spaced table."""
     return xmin * np.exp(1 / Npt * np.log(xmax / xmin) * (0.5 + np.arange(Npt)))
 
-@njit
+#@njit
 def DX_over_X(xmin, xmax, Npt):
     """Returns Dx/x for a logarithmically spaced table created by makelogtab."""
     return np.exp(0.5 / Npt * np.log(xmax / xmin)) - np.exp(-0.5 / Npt * np.log(xmax / xmin))

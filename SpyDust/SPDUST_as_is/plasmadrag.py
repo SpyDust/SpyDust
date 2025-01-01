@@ -5,7 +5,7 @@ from SpyDust import SpDust_data_dir
 from ..utils.util import cgsconst, makelogtab, maketab, DX_over_X
 from .grain_properties import acx
 
-from numba import jit
+#from numba import jit
 import os
 from ..utils.mpiutil import *
 
@@ -117,7 +117,7 @@ smalletabs.Gamma_max = Gamma_max
 if rank0:
     print("I(Zg<0, parabolic) stored")
 
-@jit(nopython=True)
+#@jit(nopython=True)
 def replace_zeros(Ipos_tab):
     """
     Replace zeros in a 2D array with a small value (1e-30), element by element.
@@ -189,7 +189,7 @@ def compute_int_plasma():
     '''
 
     # Define function for parallel computation
-    @jit(nopython=True)
+    #@jit(nopython=True)
     def loop(ie):
         e_1 = e_1tab[ie]
         Aval = e_1 / (e_1 + 2.0)
@@ -231,7 +231,7 @@ def compute_int_plasma():
     '''
 
     # Define function for parallel computation
-    @jit(nopython=True)
+    #@jit(nopython=True)
     def loop(ie):
         e_1 = e_1tab[ie]
         Aval = e_1 / (e_1 + 2.0)
@@ -262,7 +262,7 @@ def compute_int_plasma():
     '''
 
     # Define function for parallel computation
-    @jit(nopython=True)
+    #@jit(nopython=True)
     def loop(ie):
         e_1 = e_1tab[ie]
         result = np.zeros(Nrot)
