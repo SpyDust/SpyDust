@@ -1,6 +1,6 @@
 # SpyDust
 
-**SpyDust** is an advanced Python package for modeling spinning dust radiation in astrophysical environments. Building upon previous models (the IDL [**SPDUST**](https://arxiv.org/pdf/1003.4732)), SpyDust offers enhanced capabilities and corrections, making it a valuable tool for researchers in astrophysics and related fields.
+[**SpyDust**](https://arxiv.org/abs/2412.03431) is an advanced Python package for modeling spinning dust radiation in astrophysical environments. Building upon previous models (the IDL [**SPDUST**](https://arxiv.org/pdf/1003.4732)), SpyDust offers enhanced capabilities and corrections, making it a valuable tool for researchers in astrophysics and related fields.
 
 ---
 
@@ -13,6 +13,8 @@
 - **Parallisation**: Functions can be run in parallel (implemented by mpi4py) by simply setting the corresponding keyword to True.
 
 - **SPDUST as is** mode: Provides a submodule, **SPDUST_as_is**, which is exactly the full equivalent of the IDL spdust. Just in case the user wants to stick with the spdust simulation.
+
+- **Example notebooks**: Provide some Jupyter notebooks to help users get started with this software package [paper](https://arxiv.org/abs/2412.03431).
 
 ---
 
@@ -64,7 +66,10 @@ Import the package in your project and explore its functionalities for modeling 
 ## History
 
 - **Version 1.0.0**: Initial release of SpyDust, introducing comprehensive grain shape modeling, updated physical processes, and degeneracy analysis tools.
-- **Future Versions**: Upcoming releases will include an SED fitting tool and improved grain rotation models.
+
+## TODO (Future Versions)
+- Get rid of numba. Use jax instead.
+- Future upgrades will include features such as the SED fitting tool (based on perturbation statistics tools like moment expansion) and improve the treatment of the grain rotation distribution.
 
 ---
 
