@@ -78,7 +78,7 @@ Import the package in your project and explore its functionalities for modeling 
 - **Author**: Zheng Zhang
 - **License**: MIT License
 - **Collaboration**: [SpyDust GitHub Collaboration](https://github.com/SpyDust/SpyDust)
-- ** Spdust Documentation**: We refer users to the website of [spdust](https://cosmo.nyu.edu/yacine/spdust/spdust.html) for better documentation of environmental parameters 
+- **Spdust Documentation**: We refer users to the website of [spdust](https://cosmo.nyu.edu/yacine/spdust/spdust.html) for better documentation of environmental parameters 
 
 ---
 
