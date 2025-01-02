@@ -2,6 +2,8 @@
 
 [**SpyDust**](https://arxiv.org/abs/2412.03431) is an advanced Python package for modeling spinning dust radiation in astrophysical environments. Building upon previous models (the IDL [**SPDUST**](https://arxiv.org/pdf/1003.4732)), SpyDust offers enhanced capabilities and corrections, making it a valuable tool for researchers in astrophysics and related fields.
 
+For a detailed understanding of the underlying models and theoretical background, refer to the publication: [SpyDust: an improved and extended implementation for modeling spinning dust radiation](https://arxiv.org/abs/2412.03431).
+
 ---
 
 ## Features
@@ -91,6 +93,8 @@ Instead of using the SpyDust rotation distribution method described in the paper
 
 - **Version 1.0.0**: Initial release of SpyDust, introducing comprehensive grain shape modeling, updated physical processes, and degeneracy analysis tools.
 
+- **Version 1.0.1**: Numba dependency removed and installation issues fixed. 
+
 ## TODO (Future Versions)
 - Future upgrades will include features such as the SED fitting tool (based on perturbation statistics tools like moment expansion) and improve the treatment of the grain rotation distribution.
 
@@ -99,16 +103,10 @@ Instead of using the SpyDust rotation distribution method described in the paper
 ## Resources
 
 - **Author**: Zheng Zhang
-- **License**: MIT License
+- **License**: This project is licensed under the MIT License - see the LICENSE file for details.
 - **Collaboration**: [SpyDust GitHub Collaboration](https://github.com/SpyDust/SpyDust)
 - **Spdust Documentation**: We refer users to the website of [spdust](https://cosmo.nyu.edu/yacine/spdust/spdust.html) for better documentation of environmental parameters 
 
 ---
 
-## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
-
----
-
-For a detailed understanding of the underlying models and theoretical background, refer to the publication: [SpyDust: an improved and extended implementation for modeling spinning dust radiation](https://arxiv.org/abs/2412.03431).
