@@ -16,7 +16,7 @@ For a detailed understanding of the underlying models and theoretical background
 
 - **SPDUST as is** mode: Provides a submodule, **SPDUST_as_is**, which is exactly the full equivalent of the IDL spdust. Just in case the user wants to stick with the spdust simulation.
 
-- **Example notebooks**: Provide some Jupyter notebooks to help users get started with this software package [paper](https://arxiv.org/abs/2412.03431).
+- **Example notebooks**: Provide some Jupyter notebooks to help users get started with this package.
 
 ---
 
