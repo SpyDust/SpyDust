@@ -80,14 +80,6 @@ Instead of using the SpyDust rotation distribution method described in the paper
 
 --- 
 
-# Resources
-
-- **Author**: Zheng Zhang
-- **License**: MIT License
-- **Paper**: https://arxiv.org/abs/2412.03431 (Z Zhang and J Chluba 2024)
-
----
-
 ## History
 
 - **Version 1.0.0**: Initial release of SpyDust, introducing comprehensive grain shape modeling, updated physical processes, and degeneracy analysis tools.
