@@ -27,7 +27,6 @@ SpyDust requires Python 3.7 or higher (up to Python 3.9) and the following depen
 **Required**:
 - `numpy`
 - `scipy`
-- `logging`
 - `mpi4py`
 
 **Optional**:
