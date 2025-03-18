@@ -1,6 +1,7 @@
 from .util import cgsconst, makelogtab, DX_over_X
 from scipy.special import erf
 from . import SpDust_data_dir
+#from numba import njit
 import numpy as np
 import os
 
@@ -388,7 +389,7 @@ class grain_distribution():
             dist[idx] = 1
             return dist
 
-    def shape_and_size_dist(self, line, a_weighted=True, normalize=False, Nbeta=50, fixed_thickness=False):
+    def shape_and_size_dist(self, line, a_weighted=True, normalize=False, Nbeta=5, fixed_thickness=False):
         '''
         Calculate the joint distribution of the grain shape parameter, beta, and the grain size, a.
 

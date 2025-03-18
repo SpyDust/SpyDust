@@ -12,7 +12,7 @@ long_description = (here / "README.md").read_text(encoding="utf-8")
 
 setup(
     name="SpyDust",  # Required
-    version="1.1",  # Required
+    version="1.2",  # Required
     description="A code for modeling spinning dust radiation",  # Optional
     long_description=long_description,  # Optional
     long_description_content_type="text/markdown",  # Optional (see note above)
@@ -43,7 +43,6 @@ setup(
     install_requires=[
         "numpy", 
         "scipy",
-        "logging",
         "mpi4py",
         #"pandas" # not necessary for spinning dust spectra; 
                   # but if free-free emission is also desired (using free_free.py), then it is needed

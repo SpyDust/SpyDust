@@ -40,7 +40,7 @@ SpyDust requires Python 3.7 or higher (up to Python 3.9) and the following depen
 You can install SpyDust using pip:
 
 ```bash
-pip install SpyDust
+pip install SpyDust --no-deps
 ```
 
 Otherwise, you can directly `git clone' this repo and set up the environment by yourself.
@@ -59,7 +59,7 @@ Here is an example of using the `SpyDust.SpyDust' function to generate a spectru
 ```python
 CNM_params = {'nh' : 30, 'T': 100., 'Chi': 1, 'xh': 1.2e-3, 'xC': 3e-4, 'y' : 0, 'gamma': 0, 'dipole': 9.3, 'line':7}
 
-The parameters are as follows: 
+# The parameters are as follows: 
 # 'nH': total hydrogen number density (cm3), 
 # 'T': gas temperature (K), 
 # 'chi': intensity of the radiation field relative to the average interstellar radiation field, 
