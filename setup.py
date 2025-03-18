@@ -12,7 +12,7 @@ long_description = (here / "README.md").read_text(encoding="utf-8")
 
 setup(
     name="SpyDust",  # Required
-    version="1.0.0",  # Required
+    version="1.2",  # Required
     description="A code for modeling spinning dust radiation",  # Optional
     long_description=long_description,  # Optional
     long_description_content_type="text/markdown",  # Optional (see note above)
@@ -41,12 +41,11 @@ setup(
     # For an analysis of "install_requires" vs pip's requirements files see:
     # https://packaging.python.org/discussions/install-requires-vs-requirements/
     install_requires=[
-        "numpy<=2.0", # numba needs slightly older numpy
+        "numpy", 
         "scipy",
-        "numba",
-        "logging",
         "mpi4py",
-        "pandas"
+        #"pandas" # not necessary for spinning dust spectra; 
+                  # but if free-free emission is also desired (using free_free.py), then it is needed
         ],
     extras_require={},
     zip_safe=False, # don't compile the package into a zip file when installed

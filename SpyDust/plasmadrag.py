@@ -5,7 +5,6 @@ from . import SpDust_data_dir
 from .util import cgsconst, makelogtab, maketab, DX_over_X
 from .Grain import acx, Inertia_largest, grainparams
 
-#from numba import jit, njit
 import os
 from .mpiutil import *
 

@@ -10,7 +10,6 @@ from .H2_photoemission import GH2, FGpe_averaged
 from .SPDUST_as_is import plasmadrag as spd_plasmadrag
 from scipy.interpolate import interp1d
 
-#from numba import njit, jit
 
 c = cgsconst.c
 mp = cgsconst.mp

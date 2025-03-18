@@ -1,4 +1,4 @@
-from ..utils.util import cgsconst, makelogtab
+from ..util import cgsconst, makelogtab
 from .grain_properties import N_C, N_H
 from .emissivity import emissivity, free_free
 import numpy as np
