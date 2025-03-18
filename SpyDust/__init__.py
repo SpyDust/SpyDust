@@ -11,4 +11,4 @@ SpDust_data_dir = os.path.join(__path__[0], 'Data_Files/')
 
 from . import AngMomDist, charge_dist, collisions, free_free, Grain, \
               H2_photoemission, infrared, mpiutil, plasmadrag, SED, \
-              util
+              SpyDust, util

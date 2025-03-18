@@ -88,7 +88,8 @@ def compute_Tev():
 
     # If the Tev table already stored, load it and return
     if os.path.exists(output_file):
-        print(f"Tev table already exists at {output_file}.")
+        if rank0:
+            print(f"Tev table already exists at {output_file}.")
         IR_arrays.Tev_tab = np.loadtxt(output_file)
         return
     

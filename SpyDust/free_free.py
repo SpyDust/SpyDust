@@ -1,5 +1,6 @@
 from . import SpDust_data_dir
 from .util import cgsconst
+from .mpiutil import rank0
 
 import numpy as np
 import pandas as pd
@@ -42,7 +43,8 @@ def read_gaunt_factor():
     for i in range(Ngamma2):
         gff_data.gff_tab[i, :] = data['gff'].values[i * Nu + np.arange(Nu)].astype(float)
     
-    print('Gaunt factor stored')
+    if rank0:
+        print('Gaunt factor stored')
 
 # Call the function to test it
 read_gaunt_factor()
