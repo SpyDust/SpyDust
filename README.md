@@ -89,7 +89,9 @@ Instead of using the SpyDust rotation distribution method described in the paper
 
 - **Version 1.0.0**: Initial release of SpyDust, introducing comprehensive grain shape modeling, updated physical processes, and degeneracy analysis tools.
 
-- **Version 1.0.1**: Numba dependency removed and installation issues fixed. 
+- **Version 1.1**: Numba dependency removed and installation issues fixed. 
+
+- **Version 1.2**: Fixed import bugs in the example notebooks.  
 
 ## TODO (Future Versions)
 - Future upgrades will include features such as the SED fitting tool (based on perturbation statistics tools like moment expansion) and improve the treatment of the grain rotation distribution.
