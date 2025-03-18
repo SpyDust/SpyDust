@@ -56,24 +56,29 @@ Import the package in your project and explore its functionalities for modeling 
 
 Here is an example of using the `SpyDust.SpyDust' function to generate a spectrum for a sample CNM environment:
 ```python
+from SpyDust.SpyDust import SpyDust
+
+# Define the environment:
+# 'nH': total hydrogen number density (cm3),
+# 'T': gas temperature (K),
+# 'chi': intensity of the radiation field relative to the average interstellar radiation field,
+# 'xh': hydrogen ionization fraction,
+# 'xC': ionized carbon fractional abundance,
+# 'y': molecular hydrogen fractional abundance,
+# 'gamma': H2 formation efficiency,
+# 'dipole': rms dipole moment for dust grains.
 CNM_params = {'nh' : 30, 'T': 100., 'Chi': 1, 'xh': 1.2e-3, 'xC': 3e-4, 'y' : 0, 'gamma': 0, 'dipole': 9.3, 'line':7}
 
-# The parameters are as follows: 
-# 'nH': total hydrogen number density (cm3), 
-# 'T': gas temperature (K), 
-# 'chi': intensity of the radiation field relative to the average interstellar radiation field, 
-# 'xh': hydrogen ionization fraction, 
-# 'xC': ionized carbon fractional abundance, 
-# 'y': molecular hydrogen fractional abundance, 
-# 'gamma': H2 formation efficiency, 
-# 'dipole': rms dipole moment for dust grains.
 
-min_freq=1 # in GHz
-max_freq=300 # in GHz
-n_freq=500
+# Generate the spectrum
+spectrum = SpyDust(params, min_freq=1, max_freq=400, n_freq=200, single_beta=True)
 
-spectrum = SpyDust.SpyDust(CNM_params, min_freq=min_freq, max_freq=max_freq, n_freq=n_freq, single_beta=True)
-# Here the boolean keyword `single_beta' means: for any given grain size, consider only one value of the shape parameter beta.
+# Plot the spectrum
+import matplotlib.pyplot as plt
+plt.loglog(spectrum[0,:], spectrum[1,:])
+plt.xlabel('Frequency (GHz)')
+plt.ylabel('Emissivity')
+plt.show()
 ```
 
 Instead of using the SpyDust rotation distribution method described in the paper, you can generate spectra using your own arbitrary distributions of configuration parameters as inputs to the `SpyDust.SED' function.
