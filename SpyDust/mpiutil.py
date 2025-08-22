@@ -127,6 +127,37 @@ def parallel_map(func, glist, root=None, method="con", comm=_comm):
     else:
         return None
 
+
+
+def parallel_map_joblib(func, glist, n_jobs=-1, backend='loky'):
+    """
+    Apply a parallel map using joblib with loky backend.
+    
+    Parameters
+    ----------
+    func : function
+        Function to apply.
+    glist : list
+        List to map over.
+    n_jobs : int, optional
+        Number of parallel jobs. -1 means use all available cores. Default is -1.
+    backend : str, optional
+        Backend to use for parallelization. Options are 'threading', 'loky', 'multiprocessing'.
+        Default is 'loky'.
+    
+    Returns
+    -------
+    results : list
+        List of results in the same order as input.
+    """
+    # Use joblib to parallelize the function calls
+    results = Parallel(n_jobs=n_jobs, backend=backend)(
+        delayed(func)(item) for item in glist
+    )
+    return results
+
+
+
 def parallel_jobs_no_gather_no_return(func, glist, method="con", comm=_comm):
     """
     Apply a parallel map using MPI.

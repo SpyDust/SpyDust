@@ -170,6 +170,7 @@ def SED(nu_tab, mu2_f_arr, beta_tab, angular_Omega_tab, cos_theta_list, cos_thet
     n_cos_theta = np.size(cos_theta_list)
     log_angular_Omega = np.log(angular_Omega_tab)
     omega_tab = nu_tab * 2 * pi
+    omega_tab_4 = omega_tab**4
     N_freqs = np.size(omega_tab)
     
     def emiss_beta(beta_ind):
@@ -184,9 +185,9 @@ def SED(nu_tab, mu2_f_arr, beta_tab, angular_Omega_tab, cos_theta_list, cos_thet
         aux_op = aux_op[mask_op]
         log_angular_Omega_op = log_angular_Omega[mask_op]
         interp_op = interp1d( log_angular_Omega_op , np.log(aux_op), kind='cubic', fill_value='extrapolate', bounds_error=False)
-        emiss_mode_1 = 8/9 *  np.exp(interp_op(np.log(omega_tab)))  * omega_tab**4
+        emiss_mode_1 = 8/9 *  np.exp(interp_op(np.log(omega_tab)))  * omega_tab_4
         if beta == 0: 
-            aux = 8/9 *  np.exp(interp_ip(np.log(omega_tab)))  * omega_tab**4
+            aux = 8/9 *  np.exp(interp_ip(np.log(omega_tab)))  * omega_tab_4
             return aux + emiss_mode_1
         aux = np.zeros((n_cos_theta, N_freqs))
         for theta_ind in range(n_cos_theta):
@@ -196,11 +197,11 @@ def SED(nu_tab, mu2_f_arr, beta_tab, angular_Omega_tab, cos_theta_list, cos_thet
             part2= 1/3 *  np.exp(interp_ip(log_omega_tab_mode2))  * (1+cos_theta)**2 / np.abs(1+beta*cos_theta)
             part3= 1/3 *  np.exp(interp_ip(log_omega_tab_mode3))  * (1-cos_theta)**2 / np.abs(1-beta*cos_theta)
             if cos_theta == 0:
-                aux[theta_ind, :] = (part2 + part3) * omega_tab**4
+                aux[theta_ind, :] = (part2 + part3) * omega_tab_4
                 continue
             log_omega_tab_mode4 = np.log(omega_tab/np.abs(beta*cos_theta))
             part4= 2/3 * np.exp(interp_ip(log_omega_tab_mode4)) * (1-cos_theta**2) / np.abs(beta*cos_theta)
-            aux[theta_ind, :] = (part2 + part3 + part4) * omega_tab**4
+            aux[theta_ind, :] = (part2 + part3 + part4) * omega_tab_4
         return np.average(aux, axis=0, weights=cos_theta_weights[beta_ind]) + emiss_mode_1 # shape (N_freqs,)
 
     result = parallel_map(emiss_beta, np.arange(len(beta_tab)))

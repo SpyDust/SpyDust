@@ -7,7 +7,18 @@ from .SED import mu2_f, SED, SED_imp
 
 debye = cgsconst.debye
 
-def SpyDust(environment, tumbling=True, output_file=None, min_freq=None, max_freq=None, n_freq=None, Ndipole=None, single_beta=False, spdust_plasma=False):
+def SpyDust(environment, 
+            tumbling=True, 
+            output_file=None, 
+            min_freq=None, 
+            max_freq=None, 
+            n_freq=None, 
+            Ndipole=None, 
+            single_beta=False, 
+            spdust_plasma=False, 
+            ang_Omega_min=1e7,
+            ang_Omega_max=1e15,
+            N_angular_Omega=500):
 
     # Check the environment structure for required parameters
     if 'dipole' not in environment and 'dipole_per_atom' not in environment:
@@ -63,9 +74,7 @@ def SpyDust(environment, tumbling=True, output_file=None, min_freq=None, max_fre
     a_tab = grain_obj.a_tab
     beta_tab = grain_obj.beta_tab
 
-    ang_Omega_min = 1e7
-    ang_Omega_max = 1e15
-    N_angular_Omega = 1000
+
     angular_Omega_tab = makelogtab(ang_Omega_min, ang_Omega_max, N_angular_Omega)
 
     mu2_f_arr = mu2_f(environment, a_tab, beta_tab, f_a_beta, 
@@ -256,7 +265,26 @@ def SpyDust_imp(environment, tumbling=True, output_file=None, min_freq=None, max
     
  
 
-def SpyDust_single_grain(environment, a, beta, tumbling=True, min_freq=None, max_freq=None, n_freq=None, Ndipole=None):
+def SpyDust_given_grain_size_shape(environment, a, beta, tumbling=True, min_freq=None, max_freq=None, n_freq=None, Ndipole=None,
+                                    ang_Omega_min=1e7,
+                                    ang_Omega_max=1e15,
+                                    N_angular_Omega=500):
+    """
+    Parameters:
+    environment (dict): A dictionary containing the environment parameters.
+    a (float): The grain size in cm.
+    beta (float): The grain shape parameter.
+    tumbling (bool, optional): Whether the grains are tumbling. Default is True.
+    min_freq (float, optional): The minimum frequency in GHz. Default is None.
+    max_freq (float, optional): The maximum frequency in GHz. Default is None.
+    n_freq (int, optional): The number of frequency points. Default is None.
+    Ndipole (int, optional): The number of dipole moments. Default is None.
+    ang_Omega_min (float, optional): The minimum angular frequency in Hz. Default is 1e7.
+    ang_Omega_max (float, optional): The maximum angular frequency in Hz. Default is 1e15.
+    N_angular_Omega (int, optional): The number of angular frequency points. Default is 500.
+    """
+    
+
 
     # Check the environment structure for required parameters
     if 'dipole' not in environment and 'dipole_per_atom' not in environment:
@@ -273,14 +301,6 @@ def SpyDust_single_grain(environment, a, beta, tumbling=True, min_freq=None, max
         mu_1d_7 = np.sqrt(N_C(1e-7) + N_H(1e-7)) * environment['dipole_per_atom']
         
 
-    # Check for grain size distribution parameters
-    if 'line' not in environment:
-        if rank0:
-            print("Please specify the grain size distribution parameters (Weingartner & Draine, 2001a).")
-        return
-
-    line = environment['line']-1
-
     # Number of dipole moments
     Ndip = 20
     if Ndipole is not None:
@@ -295,7 +315,7 @@ def SpyDust_single_grain(environment, a, beta, tumbling=True, min_freq=None, max
 
     # Frequency settings
     GHz = 1e9
-    numin = 1 * GHz
+    numin = 0.1 * GHz
     numax = 100 * GHz
     Nnu = 200
     if min_freq is not None:
@@ -311,9 +331,6 @@ def SpyDust_single_grain(environment, a, beta, tumbling=True, min_freq=None, max
     a_tab = np.array([a])
     beta_tab = np.array([beta])
 
-    ang_Omega_min = 1e7
-    ang_Omega_max = 1e15
-    N_angular_Omega = 1000
     angular_Omega_tab = makelogtab(ang_Omega_min, ang_Omega_max, N_angular_Omega)
 
     mu2_f_arr = mu2_f(environment, a_tab, beta_tab, f_a_beta, 
@@ -347,7 +364,7 @@ def SpyDust_single_grain(environment, a, beta, tumbling=True, min_freq=None, max
             aux[-1] = 1
             cos_theta_weights.append(aux)
 
-    resultSED = SED(nu_tab, mu2_f_arr, beta_tab, angular_Omega_tab, cos_theta_list, cos_theta_weights)
+    resultSED = SED_imp(nu_tab, mu2_f_arr, beta_tab, angular_Omega_tab, cos_theta_list, cos_theta_weights)
 
      # Handle free-free emission if requested
     Jy = 1e-23
