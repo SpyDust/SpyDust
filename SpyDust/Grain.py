@@ -210,6 +210,15 @@ def Inertia_ref(a, beta):
     else:
         return Inertia_ref_ellipsoidal(a, beta)
     
+def eval_beta(a):
+    if a <= a2:
+        beta_val = cylindrical_params(a, d)[1]
+    else:
+        beta_val=0
+
+    return beta_val
+
+    
 #@njit
 def asurf(a, beta):
     '''
