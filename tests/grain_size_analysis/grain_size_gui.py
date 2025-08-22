@@ -27,8 +27,8 @@ from PyQt5.QtCore import Qt
 import pickle
 
 # Add the SpyDust package to path
-sys.path.append('/Users/zzhang/Workspace/SpyDust/')
-sys.path.append('/Users/zzhang/Workspace/SpyDust/tests/grain_size_analysis/')
+# sys.path.append('/Users/zzhang/Workspace/SpyDust/')
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 # Import required modules
 import SpyDust.Grain as Grain
@@ -36,9 +36,9 @@ from SpyDust.util import makelogtab
 
 from grain_size import *
 
-params_list = np.load('/Users/zzhang/Workspace/SpyDust/tests/grain_size_analysis/CNM_parameter_list.npy')
-SED_list = np.load('/Users/zzhang/Workspace/SpyDust/tests/grain_size_analysis/CNM_SED_list.npy')
-feature_list = np.load('/Users/zzhang/Workspace/SpyDust/tests/grain_size_analysis/CNM_feature_list.npy')
+params_list = np.load('CNM_parameter_list.npy')
+SED_list = np.load('CNM_SED_list.npy')
+feature_list = np.load('CNM_feature_list.npy')
 
 peak_freq_min = np.exp(feature_list[:, 0].min())
 peak_freq_max = np.exp(feature_list[:, 0].max())
@@ -48,7 +48,7 @@ width_max = feature_list[:, 1].max()
 
 
 
-freqs = np.load('/Users/zzhang/Workspace/SpyDust/tests/grain_size_analysis/freqs.npy')
+freqs = np.load('freqs.npy')
 
 
 class GrainSizeGUI(QMainWindow):
