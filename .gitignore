@@ -1,2 +1,5 @@
 __pycache__/
 SPDUST.2.0
+
+# Large data files
+*.npy
