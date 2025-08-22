@@ -24,7 +24,6 @@ from PyQt5.QtWidgets import (
     QGridLayout, QGroupBox, QDoubleSpinBox
 )
 from PyQt5.QtCore import Qt
-import pickle
 
 # Add the SpyDust package to path
 # sys.path.append('/Users/zzhang/Workspace/SpyDust/')
@@ -36,9 +35,9 @@ from SpyDust.util import makelogtab
 
 from grain_size import *
 
-params_list = np.load('CNM_parameter_list.npy')
-SED_list = np.load('CNM_SED_list.npy')
-feature_list = np.load('CNM_feature_list.npy')
+params_list = np.load('CNM_parameter_list.npy', allow_pickle=True)
+SED_list = np.load('CNM_SED_list.npy', allow_pickle=True)
+feature_list = np.load('CNM_feature_list.npy', allow_pickle=True)
 
 peak_freq_min = np.exp(feature_list[:, 0].min())
 peak_freq_max = np.exp(feature_list[:, 0].max())
