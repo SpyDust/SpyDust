@@ -11,10 +11,11 @@ import numpy as np
 from . import SpDust_data_dir  
 from .util import cgsconst, makelogtab, DX_over_X, biinterp_func, coord_grid
 from .mpiutil import *
-from .Grain import asurf, N_C
+from .Grain import asurf, N_C, grainparams
 from scipy.interpolate import interp1d    
 import os      
 
+a2_default = grainparams.a2
 
 class paramjpe:
     # Stores the parameters used in the JPE calculation
@@ -563,37 +564,37 @@ def se(Z, a):
 
 # Function to calculate J_ion
 #@njit
-def J_ion_aux(nh, T, xh, xc, Z, a, beta):
-    asurf_val = asurf(a, beta)  
+def J_ion_aux(nh, T, xh, xc, Z, a, beta, a2=a2_default):
+    asurf_val = asurf(a, beta, a2=a2)  
     tau = asurf_val * k * T / q**2
     nu = Z 
     return nh * np.sqrt(8.0 * k * T / (pi * mp)) * pi * asurf_val**2 * (xh + xc / np.sqrt(12.0)) * Jtilde(tau, nu)
 
-def J_ion(env, Z, a, beta):
+def J_ion(env, Z, a, beta, a2=a2_default):
     nh = env['nh']
     T = env['T']
     xh = env['xh']
     xc = env['xC']
-    return J_ion_aux(nh, T, xh, xc, Z, a, beta)
+    return J_ion_aux(nh, T, xh, xc, Z, a, beta, a2=a2)
 
 # Function to calculate J_electron
 #@njit
-def J_electron_aux(nh, T, xh, xc, Z, a, beta):
-    asurf_val = asurf(a, beta)  
+def J_electron_aux(nh, T, xh, xc, Z, a, beta, a2=a2_default):
+    asurf_val = asurf(a, beta, a2=a2)  
     tau = asurf_val * k * T / q**2
     nu = -Z 
     return nh * (xh + xc) * se(Z, a) * np.sqrt(8.0 * k * T / (np.pi * me)) * pi * asurf_val**2 * Jtilde(tau, nu)
 
-def J_electron(env, Z, a, beta):
+def J_electron(env, Z, a, beta, a2=a2_default):
     nh = env['nh']
     T = env['T']
     xh = env['xh']
     xc = env['xC']
-    return J_electron_aux(nh, T, xh, xc, Z, a, beta) 
+    return J_electron_aux(nh, T, xh, xc, Z, a, beta, a2=a2)
 
 # Function to compute charge distribution
 #@jit
-def charge_dist_aux(Chi, nh, T, xh, xc, a, beta):
+def charge_dist_aux(Chi, nh, T, xh, xc, a, beta, a2=a2_default):
     Z_min = Zmin(a) 
     Z_max = Zmax(a)  
 
@@ -609,13 +610,13 @@ def charge_dist_aux(Chi, nh, T, xh, xc, a, beta):
 
     for j in range(abs(Z_min) + 1):
         Z = -j
-        Ji_neg[j] = J_ion_aux(nh, T, xh, xc, Z, a, beta)
-        Je_neg[j] = J_electron_aux(nh, T, xh, xc, Z, a, beta)
+        Ji_neg[j] = J_ion_aux(nh, T, xh, xc, Z, a, beta, a2=a2)
+        Je_neg[j] = J_electron_aux(nh, T, xh, xc, Z, a, beta, a2=a2)
     Jpe_neg = Chi * Jpe_ISRF['Jpeneg']
 
     for Z in range(Z_max + 1):
-        Ji_pos[Z] = J_ion_aux(nh, T, xh, xc, Z, a, beta)
-        Je_pos[Z] = J_electron_aux(nh, T, xh, xc, Z, a, beta)
+        Ji_pos[Z] = J_ion_aux(nh, T, xh, xc, Z, a, beta, a2=a2)
+        Je_pos[Z] = J_electron_aux(nh, T, xh, xc, Z, a, beta, a2=a2)
     Jpe_pos = Chi * Jpe_ISRF['Jpepos']
 
     # Compute charge distribution function using DL98b (4)
@@ -675,11 +676,11 @@ def charge_dist_aux(Chi, nh, T, xh, xc, a, beta):
 
     return fZ
 
-def charge_dist(env, a, beta):
+def charge_dist(env, a, beta, a2=a2_default):
     Chi = env['Chi']
     nh = env['nh']
     T = env['T']
     xh = env['xh']
     xc = env['xC']
 
-    return charge_dist_aux(Chi, nh, T, xh, xc, a, beta)
+    return charge_dist_aux(Chi, nh, T, xh, xc, a, beta, a2=a2)

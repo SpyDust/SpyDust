@@ -15,6 +15,7 @@ mp = cgsconst.mp
 q = cgsconst.q
 pi = np.pi
 I = 1j  # complex number equivalent to IDL's "I = complex(0d, 1d)"
+a2 = grainparams.a2
 
 class smalletabs:
     smalle_tab = None
@@ -701,7 +702,7 @@ def little_gp_neutral_interpol(phi, Omega_arr):
 
 
 #@jit
-def Gp_per_mu2_averaged(temp, xh, xC, a, beta, fZ, omega_vec):
+def Gp_per_mu2_averaged(temp, xh, xC, a, beta, fZ, omega_vec, a2=a2):
     """
     Returns G_p^(AHD09)(a, omega)/mu_ip^2 averaged over grain charges.
 
@@ -715,7 +716,7 @@ def Gp_per_mu2_averaged(temp, xh, xC, a, beta, fZ, omega_vec):
     - Gp_over_mu2: Averaged G_p divided by mu_ip^2, as an array of the same dimension as omega. shape: [Nomega]
     """
    
-    acx_val = acx(a, beta)
+    acx_val = acx(a, beta, a2=a2)
 
     Nomega = np.size(omega_vec)
 
@@ -747,7 +748,7 @@ def Gp_per_mu2_averaged(temp, xh, xC, a, beta, fZ, omega_vec):
     return Gp_over_mu2
 
 
-def FGp_averaged(env, a, beta, fZ, omega_vec, mu_ip, mu_op, tumbling=True):
+def FGp_averaged(env, a, beta, fZ, omega_vec, mu_ip, mu_op, tumbling=True, a2=a2):
     """
     Returns a structure {Fp, Gp} with each element as an array of dimensions [Nomega, Nmu].
     (Averaged over grain charges.)
@@ -767,7 +768,7 @@ def FGp_averaged(env, a, beta, fZ, omega_vec, mu_ip, mu_op, tumbling=True):
     mu_ip_2 = np.array(mu_ip)**2
     mu_op_2 = np.array(mu_op)**2
     temp, xh, xC = env['T'], env['xh'], env['xC']
-    Gp_op = 2/3 * Gp_per_mu2_averaged(temp, xh, xC, a, beta, fZ, 2 * omega_vec) 
+    Gp_op = 2/3 * Gp_per_mu2_averaged(temp, xh, xC, a, beta, fZ, 2 * omega_vec, a2=a2) # shape: [Nomegas]
     Nomegas = np.size(omega_vec)
 
     if beta == 0: # Spherical grain
@@ -782,7 +783,7 @@ def FGp_averaged(env, a, beta, fZ, omega_vec, mu_ip, mu_op, tumbling=True):
             Omega_arr = np.absolute(omega  * (1 - beta * cos_theta_list) / (1+beta) )
             weight_Gp = (1 - cos_theta_list)**2 / 4
             weight_Fp = - weight_Gp * cos_theta_list
-            aux_result = Gp_per_mu2_averaged(temp, xh, xC, a, beta, fZ, Omega_arr)
+            aux_result = Gp_per_mu2_averaged(temp, xh, xC, a, beta, fZ, Omega_arr, a2=a2) 
             result_Gp = 2*np.average(aux_result*weight_Gp) *  mu_ip_2 + Gp_op[omega_ind] * mu_op_2 
             result_Fp = result_Gp/(1+beta) + (beta/(1+beta)) * 2*np.average(aux_result*weight_Fp) *  mu_ip_2 
             return result_Gp, result_Fp
@@ -800,7 +801,7 @@ def FGp_averaged(env, a, beta, fZ, omega_vec, mu_ip, mu_op, tumbling=True):
         return {'Fp': Fp, 'Gp': Gp}
 
     # Standard spherical grain with K = J
-    Gp = Gp_per_mu2_averaged(temp, xh, xC, a, beta, fZ, omega_vec)
+    Gp = Gp_per_mu2_averaged(temp, xh, xC, a, beta, fZ, omega_vec, a2=a2)
     Gp = np.matmul(Gp.reshape(-1,1), mu_ip_2.reshape(1,-1))
     Fp = Gp
 

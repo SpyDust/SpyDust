@@ -1,4 +1,5 @@
-from .Grain import N_C, N_H, grain_distribution
+from networkx import edges
+from .Grain import N_C, N_H, grain_distribution, grainparams
 from .util import cgsconst, makelogtab
 from .mpiutil import *
 import numpy as np
@@ -6,6 +7,33 @@ import numpy as np
 from .SED import mu2_f, SED, SED_imp
 
 debye = cgsconst.debye
+a2_default = grainparams.a2
+d = grainparams.d
+
+def generate_ang_Omega_limits(numin, numax, cos_theta_list, beta_list):
+    assert np.all((cos_theta_list >= -1) & (cos_theta_list <= 1)), "cos_theta_list must be in [-1, 1]"
+    assert np.all(cos_theta_list != 0), "cos_theta_list must not contain 0 to avoid division by zero."
+
+    beta_tab = beta_list[beta_list != 0]
+    if beta_tab.size > 0:
+        beta_cos_theta = beta_tab[:, np.newaxis] * cos_theta_list[np.newaxis, :]
+        min_beta_cos_beta = np.min(np.abs(beta_cos_theta))
+        min_one_minus_beta_cos = np.min(np.abs(1. - beta_cos_theta))
+        max_one_minus_beta_cos = np.max(np.abs(1. - beta_cos_theta))
+        min_one_plus_beta_cos = np.min(np.abs(1. + beta_cos_theta))
+        max_one_plus_beta_cos = np.max(np.abs(1. + beta_cos_theta))
+        min_denom = min(min_one_minus_beta_cos, min_one_plus_beta_cos, min_beta_cos_beta)
+        max_denom = max(max_one_minus_beta_cos, max_one_plus_beta_cos)
+        ang_Omega_min = numin*2*np.pi / max_denom / 5.0
+        ang_Omega_max = numax*2*np.pi / min_denom * 5.0
+        return ang_Omega_min, ang_Omega_max
+    else:
+        return 1e6, 1e17
+
+def generate_cos_theta_list(num_points=20):
+    edges = np.linspace(-1, 1, num_points+1)  # 21 edges define 20 intervals
+    cos_theta_list = 0.5 * (edges[:-1] + edges[1:])
+    return cos_theta_list
 
 def SpyDust(environment, 
             tumbling=True, 
@@ -14,11 +42,12 @@ def SpyDust(environment,
             max_freq=None, 
             n_freq=None, 
             Ndipole=None, 
+            Ncos_theta=20,
             single_beta=False, 
             spdust_plasma=False, 
-            ang_Omega_min=1e7,
-            ang_Omega_max=1e15,
-            N_angular_Omega=500):
+            N_angular_Omega=500,
+            a2=a2_default,
+            d=d):
 
     # Check the environment structure for required parameters
     if 'dipole' not in environment and 'dipole_per_atom' not in environment:
@@ -70,11 +99,13 @@ def SpyDust(environment,
     nu_tab = makelogtab(numin, numax, Nnu)
 
     grain_obj = grain_distribution()
-    f_a_beta = grain_obj.shape_and_size_dist(line, normalize=False, fixed_thickness=single_beta)
+    f_a_beta = grain_obj.shape_and_size_dist(line, normalize=False, fixed_thickness=single_beta, a2=a2, d=d)
     a_tab = grain_obj.a_tab
     beta_tab = grain_obj.beta_tab
 
+    cos_theta_list = generate_cos_theta_list(num_points=Ncos_theta)
 
+    ang_Omega_min, ang_Omega_max = generate_ang_Omega_limits(numin, numax, cos_theta_list, beta_tab)
     angular_Omega_tab = makelogtab(ang_Omega_min, ang_Omega_max, N_angular_Omega)
 
     mu2_f_arr = mu2_f(environment, a_tab, beta_tab, f_a_beta, 
@@ -85,9 +116,9 @@ def SpyDust(environment,
                       omega_min=ang_Omega_min, 
                       omega_max=ang_Omega_max, 
                       Nomega=N_angular_Omega,
-                      spdust_plasma=spdust_plasma)
-    
-    cos_theta_list = np.linspace(-1, 1, 20)
+                      spdust_plasma=spdust_plasma,
+                      a2=a2
+                      )
 
     # We mimic spdust and give sort of "ad-hoc" treatment to the angular distribution of the grain rotation.
     # The user can provide a more sophisticated treatment of the distribution of internal alignment.
@@ -138,9 +169,10 @@ def SpyDust(environment,
     
     return result # shape (2, Nnu); rows are nu, SED(nu) in Jy
 
-    
-    
-def SpyDust_imp(environment, tumbling=True, output_file=None, min_freq=None, max_freq=None, n_freq=None, Ndipole=None, single_beta=False, spdust_plasma=False):
+
+
+def SpyDust_imp(environment, tumbling=True, output_file=None, min_freq=None, max_freq=None, n_freq=None, 
+                Ndipole=None, Ncos_theta=20, single_beta=False, spdust_plasma=False, a2=a2_default, d=d):
 
     # Check the environment structure for required parameters
     if 'dipole' not in environment and 'dipole_per_atom' not in environment:
@@ -192,12 +224,14 @@ def SpyDust_imp(environment, tumbling=True, output_file=None, min_freq=None, max
     nu_tab = makelogtab(numin, numax, Nnu)
 
     grain_obj = grain_distribution()
-    f_a_beta = grain_obj.shape_and_size_dist(line, normalize=False, fixed_thickness=single_beta)
+    f_a_beta = grain_obj.shape_and_size_dist(line, normalize=False, fixed_thickness=single_beta, a2=a2, d=d)
     a_tab = grain_obj.a_tab
     beta_tab = grain_obj.beta_tab
 
-    ang_Omega_min = 1e7
-    ang_Omega_max = 1e15
+    cos_theta_list = generate_cos_theta_list(num_points=Ncos_theta)
+
+    ang_Omega_min, ang_Omega_max = generate_ang_Omega_limits(numin, numax, cos_theta_list, beta_tab)
+
     N_angular_Omega = 1000
     angular_Omega_tab = makelogtab(ang_Omega_min, ang_Omega_max, N_angular_Omega)
 
@@ -209,9 +243,11 @@ def SpyDust_imp(environment, tumbling=True, output_file=None, min_freq=None, max
                       omega_min=ang_Omega_min, 
                       omega_max=ang_Omega_max, 
                       Nomega=N_angular_Omega,
-                      spdust_plasma=spdust_plasma)
+                      spdust_plasma=spdust_plasma,
+                      a2=a2
+                      )
+
     
-    cos_theta_list = np.linspace(-1, 1, 20)
 
     # We mimic spdust and give sort of "ad-hoc" treatment to the angular distribution of the grain rotation.
     # The user can provide a more sophisticated treatment of the distribution of internal alignment.
@@ -266,9 +302,10 @@ def SpyDust_imp(environment, tumbling=True, output_file=None, min_freq=None, max
  
 
 def SpyDust_given_grain_size_shape(environment, a, beta, tumbling=True, min_freq=None, max_freq=None, n_freq=None, Ndipole=None,
-                                    ang_Omega_min=1e7,
-                                    ang_Omega_max=1e15,
-                                    N_angular_Omega=500):
+                                    N_angular_Omega=500,
+                                    Ncos_theta=20,
+                                    a2=a2_default
+                                    ):
     """
     Parameters:
     environment (dict): A dictionary containing the environment parameters.
@@ -279,8 +316,8 @@ def SpyDust_given_grain_size_shape(environment, a, beta, tumbling=True, min_freq
     max_freq (float, optional): The maximum frequency in GHz. Default is None.
     n_freq (int, optional): The number of frequency points. Default is None.
     Ndipole (int, optional): The number of dipole moments. Default is None.
-    ang_Omega_min (float, optional): The minimum angular frequency in Hz. Default is 1e7.
-    ang_Omega_max (float, optional): The maximum angular frequency in Hz. Default is 1e15.
+    # ang_Omega_min (float, optional): The minimum angular frequency in Hz. Default is 1e7.
+    # ang_Omega_max (float, optional): The maximum angular frequency in Hz. Default is 1e15.
     N_angular_Omega (int, optional): The number of angular frequency points. Default is 500.
     """
     
@@ -331,6 +368,10 @@ def SpyDust_given_grain_size_shape(environment, a, beta, tumbling=True, min_freq
     a_tab = np.array([a])
     beta_tab = np.array([beta])
 
+    cos_theta_list = generate_cos_theta_list(num_points=Ncos_theta)
+
+    ang_Omega_min, ang_Omega_max = generate_ang_Omega_limits(numin, numax, cos_theta_list, beta_tab)
+
     angular_Omega_tab = makelogtab(ang_Omega_min, ang_Omega_max, N_angular_Omega)
 
     mu2_f_arr = mu2_f(environment, a_tab, beta_tab, f_a_beta, 
@@ -341,28 +382,27 @@ def SpyDust_given_grain_size_shape(environment, a, beta, tumbling=True, min_freq
                       omega_min=ang_Omega_min, 
                       omega_max=ang_Omega_max, 
                       Nomega=N_angular_Omega,
-                      spdust_plasma=False)
+                      spdust_plasma=False,
+                      a2=a2)
     
-    cos_theta_list = np.linspace(-1, 1, 20)
-
     # We mimic spdust and give a quite ad-hoc treatment to the angular distribution of the grain rotation.
     # The user can provide a more sophisticated treatment of the distribution of internal alignment.
     cos_theta_weights = []
-    for beta in beta_tab:
+
+    if beta == 0:
+        tumbling = False
+
+    if not tumbling: # if not tumbling, all grains spin around the axis of largest inertia
         if beta > 0: # rotation around the axis of largest inertia (prolate grain, theta = pi/2)
             aux = np.zeros_like(cos_theta_list)
             aux[15] = 1
             cos_theta_weights.append(aux)
-        elif beta > -0.1: # rotation around the axis of largest inertia (nearly spherical grains; theta=0)
-            aux = np.zeros_like(cos_theta_list)
-            aux[-1] = 1
-            cos_theta_weights.append(aux)
-        elif tumbling:
-            cos_theta_weights.append(None) # rotation with isotropic distribution of theta
         else:  # rotation around the axis of largest inertia (oblate grains; theta=0)
             aux = np.ones_like(cos_theta_list)
             aux[-1] = 1
             cos_theta_weights.append(aux)
+    else:  # tumbling grains
+        cos_theta_weights.append(None) # rotation with isotropic distribution of theta
 
     resultSED = SED_imp(nu_tab, mu2_f_arr, beta_tab, angular_Omega_tab, cos_theta_list, cos_theta_weights)
 

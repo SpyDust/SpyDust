@@ -38,6 +38,8 @@ eV = cgsconst.eV
 pi = np.pi
 Energy_tab_max = np.max(Qabstabs.Qabs_hnu_tab) # Maximum energy (eV) in the Qabs_hnu_tab
 
+a2 = grainparams.a2  # nm, transition from disklike to spherical grains
+
 #@njit
 def f2(x):
     """
@@ -556,6 +558,7 @@ def set_up_IR_arrays():
     chi_0 = 1e-5
     chi_N = 1e10
     Nchi = 30
+
     # Calculating chi_min and chi_max as done in IDL
     chi_min = np.exp(np.log(chi_0) - 1.0 / (2 * Nchi) * np.log(chi_N / chi_0))
     chi_max = np.exp(np.log(chi_N) - 1.0 / (2 * Nchi) * np.log(chi_N / chi_0))
@@ -570,6 +573,7 @@ def set_up_IR_arrays():
     IR_arrays.Nchi = Nchi
     IR_arrays.chi_tab = chi_tab
     pass
+
 
 set_up_IR_arrays()
 
@@ -618,8 +622,15 @@ def compute_FGIR_integrals():
             result[ichi, 3] = FGIR_integral_neutral['GIR_integral']
         return result
     
+    import time
+
+    start_time = time.time()
     # Parallelize the loop
     result = np.array(parallel_map(loop, np.arange(Na)) ) # shape: (Na, Nchi, 4)
+
+    end_time = time.time()
+    if rank0:
+        print(f"Time taken to compute FGIR integrals: {end_time - start_time:.2f} seconds")
         
     """
     # Initialize arrays for FIR and GIR integrals (charged and neutral)
@@ -671,6 +682,59 @@ precompile_njit_functions()
 """
 
 compute_FGIR_integrals()
+
+def Benchmark_compute_FGIR_integrals(a_tab, chi_tab):
+    """
+    Computes and stores FIR and GIR integrals for charged and neutral grains
+    over a range of grain sizes (a) and ISRF scaling factors (Chi).
+    """
+    a_tab = a_tab.copy()
+    chi_tab = chi_tab.copy()
+    a_tab = a_tab.reshape(-1)
+    chi_tab = chi_tab.reshape(-1)
+    Na = len(a_tab)
+    Nchi = len(chi_tab)
+
+    # If the FIR and GIR integrals are already stored in the data directory, 
+    # load them and return
+
+    # Loop over grain sizes (a_tab) and Chi values (chi_tab)
+    # Define a function to do the loop for a given grain size
+    def loop(ia):
+        a = a_tab[ia]
+        Energy_modes_op, Energy_modes_ip, Energy_modes_CH = Energy_modes(a)
+        Mval = 100
+        Energy_max = 13.6 * eV  # Maximum energy in erg
+        result = np.zeros((Nchi, 4))
+        for ichi in range(Nchi):
+            Chi = chi_tab[ichi]
+            # Compute integrals for charged grains (Z = 1)
+            FGIR_integral_charged, Energy_max, Mval = FGIR_integrals(a, 1, Chi,  Energy_modes_op, Energy_modes_ip, Energy_modes_CH, Mval, Energy_max)
+            result[ichi, 0] = FGIR_integral_charged['FIR_integral']
+            result[ichi, 1] = FGIR_integral_charged['GIR_integral']
+            # Compute integrals for neutral grains (Z = 0)
+            FGIR_integral_neutral, Energy_max, Mval = FGIR_integrals(a, 0, Chi,  Energy_modes_op, Energy_modes_ip, Energy_modes_CH, Mval, Energy_max)
+            result[ichi, 2] = FGIR_integral_neutral['FIR_integral']
+            result[ichi, 3] = FGIR_integral_neutral['GIR_integral']
+        return result
+    
+    import time
+
+    start_time = time.time()
+    # Parallelize the loop
+    result = np.array(parallel_map(loop, np.arange(Na)) ) # shape: (Na, Nchi, 4)
+
+    end_time = time.time()
+    if rank0:
+        print(f"Time taken to compute FGIR integrals: {end_time - start_time:.2f} seconds")
+        
+    FIR_integral_charged = result[:, :, 0]
+    GIR_integral_charged = result[:, :, 1]
+    FIR_integral_neutral = result[:, :, 2]
+    GIR_integral_neutral = result[:, :, 3]
+
+    return FIR_integral_charged, GIR_integral_charged, FIR_integral_neutral, GIR_integral_neutral
+
 
 def FGIR_integrals_interpol(a, Z, Chi):
     """
@@ -755,7 +819,7 @@ def FGIR_integrals_interpol(a, Z, Chi):
     )
     return {'FIR_integral': FIR_integral, 'GIR_integral': GIR_integral}
 
-def FGIR(env, a, beta, Zg):
+def FGIR(env, a, beta, Zg, a2=a2):
     """
     Computes FIR and GIR for a grain with radius `a`, charge `Zg`, and environment `env`.
     Parameters:
@@ -770,8 +834,8 @@ def FGIR(env, a, beta, Zg):
     Tval = env['T']
     nh = env['nh']
     # Compute various physical quantities
-    Inertia_val = Inertia_largest(a, beta) 
-    acx_val = acx(a, beta)  
+    Inertia_val = Inertia_largest(a, beta, a2=a2) 
+    acx_val = acx(a, beta, a2=a2)  
     tau_H = 1.0 / (nh * mp * np.sqrt(2.0 * k * Tval / (pi * mp)) 
                    * 4.0 * pi * acx_val**4 / (3.0 * Inertia_val))
     # Interpolate FIR and GIR integrals
@@ -782,11 +846,11 @@ def FGIR(env, a, beta, Zg):
     FIR = 2.0 * tau_H / (pi * Inertia_val) * IntF
     GIR = h * tau_H / (3.0 * pi * Inertia_val * k * Tval) * IntG  # Corrected version
     # Adjust for disklike grains if a < a2
-    if a < grainparams.a2:
+    if a < a2:
         FIR *= 5.0 / 3.0
     return {'FIR': FIR, 'GIR': GIR}
 
-def FGIR_averaged(env, a, beta, fZ):
+def FGIR_averaged(env, a, beta, fZ, a2=a2):
     """
     Computes the averaged FIR and GIR values for a grain with radius `a`, using the charge distribution `fZ` and environment `env`.
     Parameters:
@@ -799,8 +863,8 @@ def FGIR_averaged(env, a, beta, fZ):
     # Extract the first element of fZ (f0 corresponds to the neutral grain contribution)
     f0 = fZ[1, 0]
     # Compute FIR and GIR for neutral and charged grains
-    FGIR_neutral = FGIR(env, a, beta, 0)  # For neutral grain (Z = 0)
-    FGIR_charged = FGIR(env, a, beta, 1)  # For charged grain (Z = 1)
+    FGIR_neutral = FGIR(env, a, beta, 0, a2=a2)  # For neutral grain (Z = 0)
+    FGIR_charged = FGIR(env, a, beta, 1, a2=a2)  # For charged grain (Z = 1)
     # Average the FIR and GIR values
     FIR = f0 * FGIR_neutral['FIR'] + (1.0 - f0) * FGIR_charged['FIR']
     GIR = f0 * FGIR_neutral['GIR'] + (1.0 - f0) * FGIR_charged['GIR']

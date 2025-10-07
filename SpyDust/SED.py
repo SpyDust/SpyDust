@@ -16,7 +16,10 @@ me = cgsconst.me
 q = cgsconst.q
 mp = cgsconst.mp
 
-def mu2_f_cond(env, a, beta, fZ, mu_rms, ip, Ndipole, tumbling=True, omega_min=1e7, omega_max=1e12, Nomega=1000, spdust_plasma=False):
+a2_default = grainparams.a2
+
+
+def mu2_f_cond(env, a, beta, fZ, mu_rms, ip, Ndipole, tumbling=True, omega_min=1e7, omega_max=1e12, Nomega=1000, spdust_plasma=False, a2=a2_default):
     """
     Returns a [3, Nomega] array:
     [omega, <mu_ip^2 fa(omega)>, <mu_op^2 fa(omega)>].
@@ -40,7 +43,7 @@ def mu2_f_cond(env, a, beta, fZ, mu_rms, ip, Ndipole, tumbling=True, omega_min=1
         mu_op = np.array([np.sqrt(op) * mu_rms]) # shape (1,)
         log_f_a = log_f_rot(env, a, beta, fZ, mu_ip, mu_op, 
                            tumbling=tumbling, 
-                           omega_min=omega_min, omega_max=omega_max, Nomega=Nomega, use_spdust_plasma=spdust_plasma)
+                           omega_min=omega_min, omega_max=omega_max, Nomega=Nomega, use_spdust_plasma=spdust_plasma, a2=a2)
         f_a = np.exp(log_f_a)
         mu_ip2_fa = f_a * mu_ip[0]**2
         mu_op2_fa = f_a * mu_op[0]**2
@@ -54,7 +57,7 @@ def mu2_f_cond(env, a, beta, fZ, mu_rms, ip, Ndipole, tumbling=True, omega_min=1
                                 maketab(xmed, xmax, aux_Nd)))
         Dx_tab = np.concatenate((DX_over_X(xmin, xmed, aux_Nd) * makelogtab(xmin, xmed, aux_Nd), 
                                  (xmax - xmed)/aux_Nd + np.zeros(aux_Nd)))
-        if a < grainparams.a2:  # Disk-like grains, need 2D Gaussian
+        if a < a2:  # Disk-like grains, need 2D Gaussian
             mu_ip = np.sqrt(ip) * mu_rms * np.outer(x_tab, np.ones(Ndipole))
             mu_op = np.sqrt(op) * mu_rms * np.outer(np.ones(Ndipole), x_tab)
             Dmu_ip = np.outer(Dx_tab, np.ones(Ndipole))
@@ -77,7 +80,7 @@ def mu2_f_cond(env, a, beta, fZ, mu_rms, ip, Ndipole, tumbling=True, omega_min=1
                                omega_min=omega_min, 
                                omega_max=omega_max, 
                                Nomega=Nomega,
-                               use_spdust_plasma=spdust_plasma)
+                               use_spdust_plasma=spdust_plasma, a2=a2)
             f_a = np.exp(log_f_a)
             Proba = np.outer(Proba, np.ones(Nomega))
             mu_ip = np.outer(mu_ip, np.ones(Nomega)) # shape (Ndipole, Nomega)
@@ -94,7 +97,7 @@ def mu2_f_cond(env, a, beta, fZ, mu_rms, ip, Ndipole, tumbling=True, omega_min=1
             Proba = x_tab**2 * np.exp(-1.5 * x_tab**2) * Dx_tab
             Proba = Proba / np.sum(Proba)
             log_f_a = log_f_rot(env, a, beta, fZ, np.sqrt(2/3) * mu_rms * x_tab, mu_rms / np.sqrt(3) * x_tab, 
-                               tumbling=tumbling,  omega_min=omega_min, omega_max=omega_max, Nomega=Nomega, use_spdust_plasma=spdust_plasma)
+                               tumbling=tumbling,  omega_min=omega_min, omega_max=omega_max, Nomega=Nomega, use_spdust_plasma=spdust_plasma, a2=a2)
             f_a = np.exp(log_f_a)
             Proba = np.outer(Proba, np.ones(Nomega))
             x_tab = np.outer(x_tab, np.ones(Nomega))
@@ -111,7 +114,7 @@ def mu2_f_cond(env, a, beta, fZ, mu_rms, ip, Ndipole, tumbling=True, omega_min=1
     # np.savez(f'{ia}_mu_fa.npz', omega=omega, mu_ip2_fa=mu_ip2_fa, mu_op2_fa=mu_op2_fa, mu_rms=mu_rms, ip=ip)
     return result
 
-def mu2_f(env, a_tab, beta_tab, f_a_beta, mole_dipole, ip, Ndipole, tumbling=True, parallel=True, contract_a=True, omega_min=1e7, omega_max=1e15, Nomega=1000, spdust_plasma=False):
+def mu2_f(env, a_tab, beta_tab, f_a_beta, mole_dipole, ip, Ndipole, tumbling=True, parallel=True, contract_a=True, omega_min=1e7, omega_max=1e15, Nomega=1000, spdust_plasma=False, a2=a2_default):
     '''
     Calculate mu^2 f(omega, a, beta, mu) and marginalize over "mu" and "a" (if contract_a is True).
     '''
@@ -126,10 +129,10 @@ def mu2_f(env, a_tab, beta_tab, f_a_beta, mole_dipole, ip, Ndipole, tumbling=Tru
             if f_a_beta[a_ind, beta_ind] == 0.:
                 result.append(np.zeros((2, Nomega)))
                 continue
-            fZ = charge_dist(env, a, beta)
+            fZ = charge_dist(env, a, beta, a2=a2)
             Z2 = np.sum(fZ[0, :]**2 * fZ[1, :])
-            mu_rms = rms_dipole(a, beta, Z2, mole_dipole)
-            mu2_fa_aux  = mu2_f_cond(env, a, beta, fZ, mu_rms, ip, Ndipole, tumbling=tumbling, omega_min=omega_min, omega_max=omega_max, Nomega=Nomega, spdust_plasma=spdust_plasma)
+            mu_rms = rms_dipole(a, beta, Z2, mole_dipole, a2=a2)
+            mu2_fa_aux  = mu2_f_cond(env, a, beta, fZ, mu_rms, ip, Ndipole, tumbling=tumbling, omega_min=omega_min, omega_max=omega_max, Nomega=Nomega, spdust_plasma=spdust_plasma, a2=a2)
             result.append(mu2_fa_aux)
         return np.array(result)
     
@@ -170,7 +173,7 @@ def SED(nu_tab, mu2_f_arr, beta_tab, angular_Omega_tab, cos_theta_list, cos_thet
     n_cos_theta = np.size(cos_theta_list)
     log_angular_Omega = np.log(angular_Omega_tab)
     omega_tab = nu_tab * 2 * pi
-    omega_tab_4 = omega_tab**4
+    omega_tab_4 = omega_tab**4 / c**3
     N_freqs = np.size(omega_tab)
     
     def emiss_beta(beta_ind):
@@ -179,15 +182,15 @@ def SED(nu_tab, mu2_f_arr, beta_tab, angular_Omega_tab, cos_theta_list, cos_thet
         mask_ip = aux_ip > 1e-300
         aux_ip = aux_ip[mask_ip]
         log_angular_Omega_ip = log_angular_Omega[mask_ip]
-        interp_ip = interp1d( log_angular_Omega_ip , np.log(aux_ip), kind='cubic', fill_value='extrapolate', bounds_error=False)
+        interp_ip = interp1d( log_angular_Omega_ip , np.log(aux_ip), kind='cubic', fill_value=-300.0, bounds_error=False)
         aux_op = mu2_f_op[beta_ind, :]
         mask_op = aux_op > 0
         aux_op = aux_op[mask_op]
         log_angular_Omega_op = log_angular_Omega[mask_op]
-        interp_op = interp1d( log_angular_Omega_op , np.log(aux_op), kind='cubic', fill_value='extrapolate', bounds_error=False)
+        interp_op = interp1d( log_angular_Omega_op , np.log(aux_op), kind='cubic', fill_value=-300.0, bounds_error=False)
         emiss_mode_1 = 8/9 *  np.exp(interp_op(np.log(omega_tab)))  * omega_tab_4
         if beta == 0: 
-            aux = 8/9 *  np.exp(interp_ip(np.log(omega_tab)))  * omega_tab_4
+            aux = 8/9 *  np.exp(interp_ip(np.log(omega_tab)))  * omega_tab_4 
             return aux + emiss_mode_1
         aux = np.zeros((n_cos_theta, N_freqs))
         for theta_ind in range(n_cos_theta):
@@ -232,7 +235,7 @@ def SED_imp(nu_tab, mu2_f_arr, beta_tab, angular_Omega_tab, cos_theta_list, cos_
     log_angular_Omega = np.log(angular_Omega_tab)
     omega_tab = nu_tab * 2 * pi
     log_omega_tab = np.log(omega_tab)
-    omega_tab_4 = omega_tab**4
+    omega_tab_4 = omega_tab**4 / c**3
     N_freqs = np.size(omega_tab)
     
     def emiss_beta(beta_ind):
@@ -243,13 +246,13 @@ def SED_imp(nu_tab, mu2_f_arr, beta_tab, angular_Omega_tab, cos_theta_list, cos_
         
         log_aux_ip = np.log(aux_ip[mask_ip]) 
 
-        interp_ip = interp1d( log_angular_Omega[mask_ip] , log_aux_ip, kind='cubic', fill_value='extrapolate', bounds_error=False)
+        interp_ip = interp1d( log_angular_Omega[mask_ip] , log_aux_ip, kind='cubic', fill_value=-300.0, bounds_error=False)
+        
         aux_op = mu2_f_op[beta_ind, :]
-        mask_op = aux_op > 1e-300
-
+        mask_op = aux_op > 0
         
         log_aux_op = np.log(aux_op[mask_op])
-        interp_op = interp1d( log_angular_Omega[mask_op] , log_aux_op, kind='cubic', fill_value='extrapolate', bounds_error=False)
+        interp_op = interp1d( log_angular_Omega[mask_op] , log_aux_op, kind='cubic', fill_value=-300.0, bounds_error=False)
         emiss_mode_1 = 8/9 *  np.exp(interp_op(log_omega_tab))  * omega_tab_4
 
         if beta == 0: 
@@ -269,12 +272,11 @@ def SED_imp(nu_tab, mu2_f_arr, beta_tab, angular_Omega_tab, cos_theta_list, cos_
         part3 = 1/3 * np.exp(interp_ip(log_omega_mode3)) * \
                 (1 - cos_theta_list[:, np.newaxis])**2 / one_minus_beta_cos
         
+        log_omega_mode4 = log_omega_tab - np.log(np.abs(beta_cos_theta))
         zero_mask = cos_theta_list == 0
-        aux[~zero_mask] = (part2[~zero_mask] + part3[~zero_mask] + \
-                          2/3 * np.exp(interp_ip(log_omega_tab - \
-                          np.log(np.abs(beta_cos_theta[~zero_mask])))) * \
-                          (1 - cos_theta_list[~zero_mask, np.newaxis]**2) / \
-                          np.abs(beta_cos_theta[~zero_mask])) * omega_tab_4
+        part4 = 2/3 * np.exp(interp_ip(log_omega_mode4[~zero_mask])) * \
+                (1 - cos_theta_list[~zero_mask, np.newaxis]**2) / np.abs(beta_cos_theta[~zero_mask])
+        aux[~zero_mask] = (part2[~zero_mask] + part3[~zero_mask] + part4) * omega_tab_4
         aux[zero_mask] = (part2[zero_mask] + part3[zero_mask]) * omega_tab_4
 
         return np.average(aux, axis=0, weights=cos_theta_weights[beta_ind]) + emiss_mode_1 # shape (N_freqs,)

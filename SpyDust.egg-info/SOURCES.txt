@@ -1,4 +1,5 @@
 README.md
+pyproject.toml
 setup.py
 SpyDust/AngMomDist.py
 SpyDust/Grain.py
@@ -21,10 +22,6 @@ SpyDust.egg-info/dependency_links.txt
 SpyDust.egg-info/not-zip-safe
 SpyDust.egg-info/requires.txt
 SpyDust.egg-info/top_level.txt
-SpyDust/Data_Files/FIR_integral_charged_30a_30chi.txt
-SpyDust/Data_Files/FIR_integral_neutral_30a_30chi.txt
-SpyDust/Data_Files/GIR_integral_charged_30a_30chi.txt
-SpyDust/Data_Files/GIR_integral_neutral_30a_30chi.txt
 SpyDust/Data_Files/PAHion_read.out
 SpyDust/Data_Files/PAHneu_read.out
 SpyDust/Data_Files/Tev_30a_30chi.txt

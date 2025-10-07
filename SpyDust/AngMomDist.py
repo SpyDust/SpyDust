@@ -16,13 +16,12 @@ mp = cgsconst.mp
 k = cgsconst.k
 pi = np.pi
 
-a2 = grainparams.a2
-
+a2_default = grainparams.a2
 
 
 # Function to calculate the characteristic damping time through collisions with neutral H atoms
 # @njit
-def tau_H(temp, nh, a, beta):
+def tau_H(temp, nh, a, beta, a2=a2_default):
     """
     Returns the characteristic damping time through collisions with neutral H atoms.
     This corresponds to Eq. (24) in AHD09.
@@ -37,8 +36,8 @@ def tau_H(temp, nh, a, beta):
     - Damping time tau_H (in seconds).
     """
 
-    acx_val = acx(a, beta)  # characteristic length scale
-    Inertia_val = Inertia_largest(a, beta)  # grain's moment of inertia
+    acx_val = acx(a, beta, a2=a2)  # characteristic length scale
+    Inertia_val = Inertia_largest(a, beta, a2=a2)  # grain's moment of inertia
 
     # Calculate tau_H using the given equation
     return 1.0 / (nh * mp * np.sqrt(2 * k * temp / (pi * mp)) * 4 * pi * acx_val**4 / (3 * Inertia_val))
@@ -95,7 +94,7 @@ def dissipation_rate_ed_theta_avrg( L_val, beta, mu_abs, ip, I_ref):
 
 # Function to calculate the inverse of the characteristic damping time through electric dipole radiation
 # @njit
-def tau_ed_inv(temp, a, beta, mu_ip, mu_op, tumbling=True):
+def tau_ed_inv(temp, a, beta, mu_ip, mu_op, tumbling=True, a2=a2_default):
     """
     Returns the inverse of the characteristic damping time through electric dipole radiation.
     This corresponds to Eq. (29) in AHD09 and Eq. (47) in SAH10 for tumbling disklike grains.
@@ -110,8 +109,8 @@ def tau_ed_inv(temp, a, beta, mu_ip, mu_op, tumbling=True):
     Returns:
     - Inverse of the damping time (in seconds^-1).
     """  
-    
-    Inertia_val = Inertia_largest(a, beta)  # grain's moment of inertia
+
+    Inertia_val = Inertia_largest(a, beta, a2=a2)  # grain's moment of inertia
     result = k * temp / (Inertia_val**2 * c**3 * (1+beta)**3)
 
     if beta==0: # spherical grain
@@ -196,8 +195,7 @@ def rescale_f_rot(omega, f_a, beta, log=True):
     f_a_new =  f_a * (1 + beta)
     return omega_new, f_a_new
 
-    
-def log_f_rot(env, a, beta, fZ, mu_ip, mu_op, tumbling=True, omega_min=1e8, omega_max=1e16, Nomega=1000, use_spdust_plasma=False):
+def log_f_rot(env, a, beta, fZ, mu_ip, mu_op, tumbling=True, omega_min=1e8, omega_max=1e16, Nomega=1000, use_spdust_plasma=False, a2=a2_default):
     """
     Returns the rotational distribution function f_a:
     f(Omega | a, beta, mu)
@@ -220,7 +218,7 @@ def log_f_rot(env, a, beta, fZ, mu_ip, mu_op, tumbling=True, omega_min=1e8, omeg
     """
     Nmu = np.size(mu_ip)  # Number of dipole moments
 
-    Inertia_val = Inertia_largest(a, beta)  # Grain's moment of inertia
+    Inertia_val = Inertia_largest(a, beta, a2=a2)  # Grain's moment of inertia
 
     Tval, nH = env['T'], env['nh']
 
@@ -228,37 +226,37 @@ def log_f_rot(env, a, beta, fZ, mu_ip, mu_op, tumbling=True, omega_min=1e8, omeg
         tumbling = False
 
     # Characteristic timescales
-    tau_H_val = tau_H(Tval, nH, a, beta)
-    tau_ed_inv_val = tau_ed_inv(Tval, a, beta, mu_ip, mu_op, tumbling=tumbling)
+    tau_H_val = tau_H(Tval, nH, a, beta, a2=a2)
+    tau_ed_inv_val = tau_ed_inv(Tval, a, beta, mu_ip, mu_op, tumbling=tumbling, a2=a2)
 
     # Evaporation temperature
-    Tev_val = Tev_effective(env, a)
+    Tev_val = Tev_effective(env, a, beta, a2=a2)
 
     # F's and G's (except for plasma drag)
-    FGn = FGn_averaged(env, a, beta, Tev_val, fZ, tumbling=tumbling)
+    FGn = FGn_averaged(env, a, beta, Tev_val, fZ, tumbling=tumbling, a2=a2)
     Fn = FGn['Fn']
     Gn = FGn['Gn']
 
     mu_tot = np.sqrt(mu_ip**2 + mu_op**2)
-    FGi = FGi_averaged(env, a, beta, Tev_val, mu_tot, fZ)
+    FGi = FGi_averaged(env, a, beta, Tev_val, mu_tot, fZ, a2=a2)
     Fi = FGi['Fi']
     Gi = FGi['Gi']
 
-    FGIR = FGIR_averaged(env, a, beta, fZ)
+    FGIR = FGIR_averaged(env, a, beta, fZ, a2=a2)
     FIR = FGIR['FIR']
     GIR = FGIR['GIR']
 
-    FGpe = FGpe_averaged(env, a, beta, fZ)
+    FGpe = FGpe_averaged(env, a, beta, fZ, a2=a2)
     Fpe = FGpe['Fpe']
     Gpe = FGpe['Gpe']
 
-    GH2_val = GH2(env, a, beta)
+    GH2_val = GH2(env, a, beta, a2=a2)
 
     # Array of omegas around the approximate peak
     omega_peak_th = np.array([np.sqrt(6 * k * Tval / Inertia_val)])  # Peak of spectrum if thermal rotation
 
     # Peak frequency for the lowest and highest values of mu_ip, mu_op
-    FGp = FGp_averaged(env, a, beta, fZ, omega_peak_th, [min(mu_ip), max(mu_ip)], [min(mu_op), max(mu_op)], tumbling=tumbling)
+    FGp = FGp_averaged(env, a, beta, fZ, omega_peak_th, [min(mu_ip), max(mu_ip)], [min(mu_op), max(mu_op)], tumbling=tumbling, a2=a2)
     Fp_th = FGp['Fp']
     Gp_th = FGp['Gp']
 
@@ -282,7 +280,7 @@ def log_f_rot(env, a, beta, fZ, mu_ip, mu_op, tumbling=True, omega_min=1e8, omeg
     Dln_omega = DX_over_X(aux_omega_min, aux_omega_max, Nomega) 
 
     # Fp(omega), Gp(omega)
-    #FGp = FGp_averaged(env, a, beta, fZ, aux_omega, mu_ip, mu_op, tumbling=tumbling)
+    #FGp = FGp_averaged(env, a, beta, fZ, aux_omega, mu_ip, mu_op, tumbling=tumbling, a2=a2)
     #Fp = FGp['Fp'] # shape (Nomega, Nmu)
     #Gp = FGp['Gp']
 
@@ -291,7 +289,7 @@ def log_f_rot(env, a, beta, fZ, mu_ip, mu_op, tumbling=True, omega_min=1e8, omeg
         Fp = FGp['Fp'] # shape (Nomega, Nmu)
         Gp = FGp['Gp']
     else:
-        FGp = FGp_averaged(env, a, beta, fZ, aux_omega, mu_ip, mu_op, tumbling=tumbling)
+        FGp = FGp_averaged(env, a, beta, fZ, aux_omega, mu_ip, mu_op, tumbling=tumbling, a2=a2)
         Fp = FGp['Fp'] # shape (Nomega, Nmu)
         Gp = FGp['Gp']
 
@@ -309,8 +307,8 @@ def log_f_rot(env, a, beta, fZ, mu_ip, mu_op, tumbling=True, omega_min=1e8, omeg
         result[ind, :] = interp_func(omegaVec_log)
     return result
 
-    
-def f_rot_old(env, a, beta, fZ, mu_ip, mu_op, tumbling=True, omega_min=1e7, omega_max=1e11, Nomega=1000):
+
+def f_rot_old(env, a, beta, fZ, mu_ip, mu_op, tumbling=True, omega_min=1e7, omega_max=1e11, Nomega=1000, a2=a2_default):
     """
     Returns the rotational distribution function f_a:
     f(Omega | a, beta, mu)
@@ -337,42 +335,42 @@ def f_rot_old(env, a, beta, fZ, mu_ip, mu_op, tumbling=True, omega_min=1e7, omeg
 
     Nmu = np.size(mu_ip)  # Number of dipole moments
 
-    Inertia_val = Inertia_largest(a, beta)  # Grain's moment of inertia
+    Inertia_val = Inertia_largest(a, beta, a2=a2)  # Grain's moment of inertia
 
     Tval, nH = env['T'], env['nh']
 
     # Characteristic timescales
-    tau_H_val = tau_H(Tval, nH, a, beta)
-    tau_ed_inv_val = tau_ed_inv(Tval, a, beta, mu_ip, mu_op, tumbling=tumbling)
+    tau_H_val = tau_H(Tval, nH, a, beta, a2=a2)
+    tau_ed_inv_val = tau_ed_inv(Tval, a, beta, mu_ip, mu_op, tumbling=tumbling, a2=a2)
 
     # Evaporation temperature
-    Tev_val = Tev_effective(env, a)
+    Tev_val = Tev_effective(env, a, beta, a2=a2)
 
     # F's and G's (except for plasma drag)
-    FGn = FGn_averaged(env, a, beta, Tev_val, fZ, tumbling=tumbling)
+    FGn = FGn_averaged(env, a, beta, Tev_val, fZ, tumbling=tumbling, a2=a2)
     Fn = FGn['Fn']
     Gn = FGn['Gn']
 
     mu_tot = np.sqrt(mu_ip**2 + mu_op**2)
-    FGi = FGi_averaged(env, a, beta, Tev_val, mu_tot, fZ)
+    FGi = FGi_averaged(env, a, beta, Tev_val, mu_tot, fZ, a2=a2)
     Fi = FGi['Fi']
     Gi = FGi['Gi']
 
-    FGIR = FGIR_averaged(env, a, beta, fZ)
+    FGIR = FGIR_averaged(env, a, beta, fZ, a2=a2)
     FIR = FGIR['FIR']
     GIR = FGIR['GIR']
 
-    FGpe = FGpe_averaged(env, a, beta, fZ)
+    FGpe = FGpe_averaged(env, a, beta, fZ, a2=a2)
     Fpe = FGpe['Fpe']
     Gpe = FGpe['Gpe']
 
-    GH2_val = GH2(env, a, beta)
+    GH2_val = GH2(env, a, beta, a2=a2)
 
     omega = makelogtab(omega_min, omega_max, Nomega) * (1+beta)
     Dln_omega = DX_over_X(omega_min*(1+beta) , omega_max*(1+beta), Nomega) 
 
     # Fp(omega), Gp(omega)
-    FGp = FGp_averaged(env, a, beta, fZ, omega, mu_ip, mu_op, tumbling=tumbling)
+    FGp = FGp_averaged(env, a, beta, fZ, omega, mu_ip, mu_op, tumbling=tumbling, a2=a2)
     Fp = FGp['Fp'] # shape (Nomega, Nmu)
     Gp = FGp['Gp']
 

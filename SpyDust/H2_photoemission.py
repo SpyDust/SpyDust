@@ -1,4 +1,4 @@
-from .Grain import acx, asurf
+from .Grain import acx, asurf, grainparams
 from .charge_dist import refr_indices, hnu_pdt, hnu_pet, Y, Qabs, sigma_pdt, nu_uisrf, E_min, JPEisrf
 from .util import DX_over_X, makelogtab, cgsconst
 import numpy as np
@@ -15,8 +15,10 @@ hbar = cgsconst.h / (2 * np.pi)
 hnu_tab = refr_indices.hnu_tab
 la_tab = refr_indices.la_tab   
 
+a2_default = grainparams.a2
+
 # Define the GH2 function
-def GH2(env, a, beta):
+def GH2(env, a, beta, a2=a2_default):
     """
     Excitation rate due to random H2 formation.
     
@@ -34,7 +36,7 @@ def GH2(env, a, beta):
     gamma = env['gamma']
     
     # Calculate ax from acx(a)
-    ax = acx(a, beta)
+    ax = acx(a, beta, a2=a2)
 
     # Define Ef (formation energy) and JJplus1 (quantum number term)
     Ef = 0.2 * eV
@@ -46,7 +48,7 @@ def GH2(env, a, beta):
     return GH2_value
 
 # Function FGpeZ
-def FGpeZ(env, a, beta, Z):
+def FGpeZ(env, a, beta, Z, a2=a2_default):
     """
     Calculate Fpe and Gpe for a given environment, grain size 'a', and charge 'Z'.
     
@@ -63,7 +65,7 @@ def FGpeZ(env, a, beta, Z):
     T = env['T']
     nh = env['nh']
     Chi = env['Chi']
-    asurf_val = asurf(a, beta)  
+    asurf_val = asurf(a, beta, a2=a2)  
 
     # Get Jpeisrf 
     aux1, aux2 = JPEisrf(a)
@@ -112,7 +114,7 @@ def FGpeZ(env, a, beta, Z):
     return {'Fpe': Fpe, 'Gpe': Gpe}
 
 
-def FGpe_averaged(env, a, beta, fZ):
+def FGpe_averaged(env, a, beta, fZ, a2=a2_default):
     """
     Computes the averaged values of Fpe and Gpe over grain charges.
 
@@ -131,7 +133,7 @@ def FGpe_averaged(env, a, beta, fZ):
 
     # Loop over all grain charge states
     for i in range(NZ):
-        FGpe = FGpeZ(env, a, beta, fZ[0, i])  # Get the Fpe and Gpe for charge state Zg
+        FGpe = FGpeZ(env, a, beta, fZ[0, i], a2=a2)  # Get the Fpe and Gpe for charge state Zg
         Fpe += fZ[1, i] * FGpe['Fpe']   # Weighted Fpe
         Gpe += fZ[1, i] * FGpe['Gpe']   # Weighted Gpe
 

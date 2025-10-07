@@ -4,7 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-def lognormal_sed_fit(freqs, sed, initial_guess=None, thres=1e-3, brief_return=True, return_fit_curve=False):
+def lognormal_sed_fit_v1(freqs, sed, initial_guess=None, thres=1e-3, brief_return=True, return_fit_curve=False):
     """
     Fit a log-normal model to SED data to extract peak frequency and width.
     
@@ -103,7 +103,7 @@ def lognormal_sed_fit(freqs, sed, initial_guess=None, thres=1e-3, brief_return=T
             f_peak = np.exp(log_f_peak_fit)
             
             # Calculate fit quality metrics
-            sed_fit = lognormal_func(freqs_clean, *popt)
+            sed_fit = lognormal_func(np.log(freqs_clean), *popt)
             ss_res = np.sum((sed_clean - sed_fit)**2)
             ss_tot = np.sum((sed_clean - np.mean(sed_clean))**2)
             r_squared = 1 - (ss_res / ss_tot) if ss_tot > 0 else 0
@@ -133,9 +133,179 @@ def lognormal_sed_fit(freqs, sed, initial_guess=None, thres=1e-3, brief_return=T
             
     except Exception as e:
         raise RuntimeError(f"Fitting failed: {str(e)}")
+
+
+
+def lognormal_sed_fit_v2(freqs, sed, initial_guess=None, thres=1e-3, brief_return=True, return_fit_curve=False):
+    """
+    Fit a log-normal model to SED data to extract peak frequency and width.
     
+    The log-normal model used is:
+    SED(f) = A * exp(-0.5 * ((ln(f) - ln(f_peak)) / sigma)^2)
     
-def measure_sed_peak_properties(freqs, sed, plot=False, save_path=None, thres=1e-3, title='SED fit:'):
+    where:
+    - f_peak is the peak frequency
+    - sigma is the width parameter in log space
+    - A is the amplitude
+    
+    Parameters:
+    -----------
+    freqs : array_like
+        1D array of frequencies
+    sed : array_like
+        1D array of SED values corresponding to freqs
+    initial_guess : tuple, optional
+        Initial guess for (amplitude, log_f_peak, sigma)
+        If None, will estimate from data
+    thres : float, optional
+        Threshold parameter. Points with SED < thres * max(SED) are masked as invalid.
+        Default is 1e-6.
+    return_fit_curve : bool, optional
+        If True, also return the fitted curve values
+    
+    Returns:
+    --------
+    f_peak : float
+        Peak frequency of the fitted log-normal
+    sigma : float
+        Width parameter in log space
+    fit_params : tuple
+        Full fitting parameters (amplitude, log_f_peak, sigma)
+    fit_curve : array_like (only if return_fit_curve=True)
+        Fitted SED values at input frequencies
+    fit_quality : dict
+        Dictionary containing R-squared and other fit quality metrics
+    """
+
+    if return_fit_curve and brief_return:
+        raise ValueError("Cannot return fit curve with brief_return=True")
+    
+    # Convert to numpy arrays
+    freqs = np.asarray(freqs)
+    sed = np.asarray(sed)
+    
+    # Calculate threshold value
+    sed_max = np.max(sed)
+    threshold_value = thres * sed_max
+    
+    # Remove any non-positive values and points below threshold
+    valid_mask = (freqs > 0) & (sed > 0) & np.isfinite(freqs) & np.isfinite(sed) & (sed >= threshold_value)
+    freqs_clean = freqs[valid_mask]
+    sed_clean = sed[valid_mask]
+    
+    if len(freqs_clean) < 3:
+        raise ValueError(f"Need at least 3 valid data points for fitting. Only {len(freqs_clean)} points above threshold {threshold_value:.2e}")
+    
+    # Define log-normal function in linear space
+    def lognormal_func(log_f, amplitude, gamma, log_f_peak, sigma):
+        return amplitude * np.exp( gamma * log_f -0.5 * ((log_f - log_f_peak) / sigma)**2)
+    
+    # Estimate initial parameters if not provided
+    if initial_guess is None:
+        # Find approximate peak
+        peak_idx = np.argmax(sed_clean)
+        f_peak_est = freqs_clean[peak_idx]
+        amplitude_est = sed_clean[peak_idx]
+        
+        # Estimate width from FWHM
+        half_max = amplitude_est / 2
+        # Find points closest to half maximum
+        left_idx = np.argmin(np.abs(sed_clean[:peak_idx] - half_max)) if peak_idx > 0 else 0
+        right_idx = peak_idx + np.argmin(np.abs(sed_clean[peak_idx:] - half_max))
+        
+        if right_idx > left_idx:
+            fwhm_freq = freqs_clean[right_idx] - freqs_clean[left_idx]
+            # Convert FWHM to sigma for log-normal (approximate)
+            sigma_est = np.log(1 + fwhm_freq / f_peak_est) / (2 * np.sqrt(2 * np.log(2)))
+        else:
+            sigma_est = 0.5  # Default fallback
+        
+        initial_guess = (amplitude_est, 0, np.log(f_peak_est), sigma_est)
+    
+    try:
+        # Perform the fit
+        popt, pcov = curve_fit(lognormal_func, np.log(freqs_clean), sed_clean, 
+                              p0=initial_guess, maxfev=5000)
+        
+        amplitude_fit, gamma_fit, log_f_peak_fit, sigma_fit = popt
+
+        if brief_return:
+            return log_f_peak_fit, gamma_fit, sigma_fit
+        else:
+            f_peak = np.exp(log_f_peak_fit)
+            
+            # Calculate fit quality metrics
+            sed_fit = lognormal_func(np.log(freqs_clean), *popt)
+            ss_res = np.sum((sed_clean - sed_fit)**2)
+            ss_tot = np.sum((sed_clean - np.mean(sed_clean))**2)
+            r_squared = 1 - (ss_res / ss_tot) if ss_tot > 0 else 0
+            
+            # Calculate parameter uncertainties
+            param_errors = np.sqrt(np.diag(pcov))
+            f_peak_error = f_peak * param_errors[2]  # Error propagation for exp(log_f_peak)
+            
+            fit_quality = {
+                'r_squared': r_squared,
+                'residual_sum_squares': ss_res,
+                'f_peak_error': f_peak_error,
+                'sigma_error': param_errors[3],
+                'amplitude_error': param_errors[0],
+                'gamma_error': param_errors[1], 
+                'covariance_matrix': pcov,
+                'n_points_used': len(freqs_clean),
+                'threshold_value': threshold_value
+            }
+            
+            if return_fit_curve:
+                # Return fit curve at original frequency points
+                fit_curve_full = np.full_like(freqs, np.nan)
+                fit_curve_full[valid_mask] = sed_fit
+                return f_peak, gamma_fit, sigma_fit, popt, fit_curve_full, fit_quality
+            else:
+                return f_peak, gamma_fit, sigma_fit, popt, fit_quality
+            
+    except Exception as e:
+        raise RuntimeError(f"Fitting failed: {str(e)}")
+  
+
+
+
+def fit_sed_ensemble(freqs, sed_ensemble, thres=1e-3, parameter_list=None, v2=True):
+    """
+    Fit SED ensemble to log-normal model.
+    
+    Parameters:
+    -----------
+    freqs : array_like
+        Frequency array
+    sed_ensemble : array_like
+        2D array of SED values (rows are different realizations)
+    thres : float, optional
+        Threshold parameter for fitting. Default is 1e-3.
+    """
+    if sed_ensemble.ndim == 1:
+        sed_ensemble = sed_ensemble.reshape(1, -1)
+    n_sed = sed_ensemble.shape[0]
+    if v2:
+        lognormal_sed_fit = lognormal_sed_fit_v2
+        fit_params = np.zeros((n_sed, 3))
+    else:
+        lognormal_sed_fit = lognormal_sed_fit_v1
+        fit_params = np.zeros((n_sed, 2))
+
+    from tqdm import tqdm
+    for i in tqdm(range(n_sed)):
+        try:
+            fit_params[i] = lognormal_sed_fit(freqs, sed_ensemble[i], thres=thres, brief_return=True)
+        except:
+            if parameter_list is not None:
+                print(parameter_list[i])
+            raise ValueError(f"Failed to fit SED {i}")
+    if sed_ensemble.shape[0] == 1:
+        fit_params = fit_params[0]
+    return fit_params
+
+def measure_sed_peak_properties(freqs, sed, plot=False, save_path=None, thres=1e-3, title='SED fit:', v2=True):
     """
     Convenience function to measure peak properties of an SED using log-normal fitting.
     
@@ -162,8 +332,12 @@ def measure_sed_peak_properties(freqs, sed, plot=False, save_path=None, thres=1e
         - 'fwhm': full width at half maximum
         - 'r_squared': fit quality
     """
-    
-    f_peak, sigma, fit_params, fit_quality = lognormal_sed_fit(freqs, sed, thres=thres, brief_return=False)
+    if v2:
+        lognormal_sed_fit = lognormal_sed_fit_v2
+        f_peak, gamma, sigma, fit_params, fit_quality = lognormal_sed_fit(freqs, sed, thres=thres, brief_return=False)
+    else:
+        lognormal_sed_fit = lognormal_sed_fit_v1
+        f_peak, sigma, fit_params, fit_quality = lognormal_sed_fit(freqs, sed, thres=thres, brief_return=False)
     
     # Calculate FWHM from sigma
     # For log-normal: FWHM ≈ f_peak * (exp(sigma*sqrt(2*ln(2))) - exp(-sigma*sqrt(2*ln(2))))
@@ -184,22 +358,26 @@ def measure_sed_peak_properties(freqs, sed, plot=False, save_path=None, thres=1e
     ft_size = 14
     
     if plot:
-        fig = plt.figure(figsize=(10, 6))
+        fig = plt.figure(figsize=(8, 4))
         ax1 = fig.add_subplot(111)
 
         # Main plot
         f_peak_plot = f_peak
-        
-        ax1.loglog(freqs, sed, 'o-', label='Data', alpha=0.7)
+        norm = max(sed)
+        ax1.loglog(freqs, sed/norm, 'o-', label='Data', alpha=0.7)
         
         # Show threshold line
         # ax1.axhline(y=fit_quality['threshold_value'], color='gray', linestyle=':', 
         #            alpha=0.5, label=f'Threshold ({thres:.0e}×max)')
-        ax1.set_ylim(fit_quality['threshold_value'], max(sed) * 10)
+        # ax1.set_ylim(fit_quality['threshold_value'], max(sed) * 10)
+        ax1.set_ylim(thres, 10)
         
         # Generate smooth fit curve for plotting
         freq_smooth = np.logspace(np.log10(freqs.min()), np.log10(freqs.max()), 200)
-        _, _, _, fit_smooth, _ = lognormal_sed_fit(freqs, sed, return_fit_curve=True, thres=thres)
+        if v2:
+            _, _, _, _, fit_smooth, _ = lognormal_sed_fit(freqs, sed, return_fit_curve=True, thres=thres, brief_return=False)
+        else:
+            _, _, _, fit_smooth, _ = lognormal_sed_fit(freqs, sed, return_fit_curve=True, thres=thres, brief_return=False)
         
         # Interpolate fit for smooth curve
         from scipy.interpolate import interp1d
@@ -208,15 +386,17 @@ def measure_sed_peak_properties(freqs, sed, plot=False, save_path=None, thres=1e
             interp_func = interp1d(freqs[valid_mask], fit_smooth[valid_mask], 
                                  kind='linear', bounds_error=False, fill_value=np.nan)
             fit_smooth_plot = interp_func(freq_smooth)
-            ax1.loglog(freq_smooth, fit_smooth_plot, '--', label='Log-normal fit', linewidth=2)
+            ax1.loglog(freq_smooth, fit_smooth_plot/norm, '--', label='\"Log-normal\" fit', linewidth=2)
         
         ax1.axvline(f_peak_plot, color='red', linestyle=':', alpha=0.8, 
-                   label=f'Peak')
+                   label=rf'Fitted peak ($\nu_{{\rm p}}$ = {f_peak_plot:.1f} GHz)')
         ax1.set_xlabel('Frequency [GHz]', fontsize=ft_size)
+        ax1.set_xlim(0.9, freqs.max())
         ax1.set_ylabel('SED (normalized)', fontsize=ft_size)
-        ax1.legend(fontsize=ft_size)
-        ax1.grid(True, alpha=0.3)
-        ax1.set_title(f'{title}, f_peak = {f_peak_plot:.3f} GHz, σ = {sigma:.3f}', fontsize=ft_size+1)
+        # No frame legend
+        ax1.legend(fontsize=ft_size, loc='upper left', frameon=False)
+        # ax1.grid(True, alpha=0.3)
+        ax1.set_title(rf'{title}', fontsize=ft_size+1)
         ax1.tick_params(axis='both', which='major', labelsize=ft_size-2)
 
         plt.tight_layout()
