@@ -110,7 +110,7 @@ def cylindrical_params(a, d_val):
     return I_ref, beta
 
 #@njit
-def beta_min(a):
+def beta_min(a, d=d):
     '''
     Calculate the minimum value of beta for a cylindrical grain, assuming the thinest disk-like grain - single .
     '''
@@ -179,14 +179,14 @@ def asurf_ellipsoidal(a, beta):
         r_1, r_2, r_3 = radii_ellipsoidal(a, beta)
         e = np.sqrt(1 - r_3**2 / r_1**2)
         surface = 2 * pi * r_1**2 * (1 + (1 - e**2) / e * np.arctanh(e))
-        asurf = np.sqrt(surface / (4 * pi))
-        return asurf
+        asurf_val = np.sqrt(surface / (4 * pi))
+        return asurf_val
     else: # Prolate grain
         r_1, r_2, r_3 = radii_ellipsoidal(a, beta)
         e = np.sqrt(1 - r_1**2 / r_3**2)
         surface = 2 * pi * r_1**2 * (1 + r_3 / r_1 / e * np.arcsin(e))
-        asurf = np.sqrt(surface / (4 * pi))
-        return asurf
+        asurf_val = np.sqrt(surface / (4 * pi))
+        return asurf_val
 
 #@njit
 def acx_ellipsoidal(a, beta):
@@ -201,7 +201,7 @@ def acx_ellipsoidal(a, beta):
 # Assume cylindrical grains for a < a2 and ellipsoidal grains for a > a2
 
 #@njit
-def Inertia_ref(a, beta):
+def Inertia_ref(a, beta, a2=a2):
     '''
     Calculate the reference moment of inertia.
     '''
@@ -209,8 +209,8 @@ def Inertia_ref(a, beta):
         return Inertia_ref_cylindrical(a, beta)
     else:
         return Inertia_ref_ellipsoidal(a, beta)
-    
-def eval_beta(a):
+
+def eval_beta(a, a2=a2, d=d):
     if a <= a2:
         beta_val = cylindrical_params(a, d)[1]
     else:
@@ -220,7 +220,7 @@ def eval_beta(a):
 
     
 #@njit
-def asurf(a, beta):
+def asurf(a, beta, a2=a2):
     '''
     Calculate the surface-equivalent radius for general grains.
     '''
@@ -230,7 +230,7 @@ def asurf(a, beta):
         return asurf_ellipsoidal(a, beta)
     
 #@njit
-def acx(a, beta):
+def acx(a, beta, a2=a2):
     '''
     Calculate the excitation equivalent radius for general grains.
     '''
@@ -240,12 +240,12 @@ def acx(a, beta):
         return acx_ellipsoidal(a, beta)
     
 #@njit
-def Inertia_largest(a, beta):
+def Inertia_largest(a, beta, a2=a2):
     '''
     Calculate the largest moment of inertia.
     '''
 
-    I_ref = Inertia_ref(a, beta)
+    I_ref = Inertia_ref(a, beta, a2=a2)
 
     if beta < 0:
         return Inertia_z(I_ref, beta)
@@ -253,7 +253,7 @@ def Inertia_largest(a, beta):
         return I_ref
     
 #@njit
-def rms_dipole(a, beta, Z2, mole_dipole):
+def rms_dipole(a, beta, Z2, mole_dipole, a2=a2):
     '''
     Calculate the root mean square dipole moment.
 
@@ -266,7 +266,7 @@ def rms_dipole(a, beta, Z2, mole_dipole):
     mole_dipole: float
         The typical molecular dipole moment. (This is equivalent to the "beta" in spdust (AHD09;SAH11). Don't confuse with the grain parameter beta in SpyDust.)
     '''
-    muZ = epsilon * np.sqrt(Z2) * q * acx(a, beta)
+    muZ = epsilon * np.sqrt(Z2) * q * acx(a, beta, a2=a2)
     N_at = N_C(a) + N_H(a)
     return np.sqrt(N_at * mole_dipole**2 + muZ**2)
 
@@ -351,7 +351,7 @@ class grain_distribution():
 
     @staticmethod
     #@njit
-    def shape_dist(a, beta_tab):
+    def shape_dist(a, beta_tab, a2=a2, d=d):
         '''
         A toy model for the distribution of the grain shape parameter, beta. 
         Note that this is a conditional distribution, given the grain size.
@@ -378,7 +378,7 @@ class grain_distribution():
     
     @staticmethod
     #@njit 
-    def shape_dist_fixed_thickness(a, beta_tab):
+    def shape_dist_fixed_thickness(a, beta_tab, a2=a2, d=d):
         '''
         The distribution of the grain shape parameter, beta, if we fix the thickness of the disk as d. 
         Note that this is a conditional distribution, given the grain size.
@@ -398,7 +398,7 @@ class grain_distribution():
             dist[idx] = 1
             return dist
 
-    def shape_and_size_dist(self, line, a_weighted=True, normalize=False, Nbeta=5, fixed_thickness=False):
+    def shape_and_size_dist(self, line, a_weighted=True, normalize=False, Nbeta=5, fixed_thickness=False, a2=a2, d=d):
         '''
         Calculate the joint distribution of the grain shape parameter, beta, and the grain size, a.
 
@@ -429,10 +429,10 @@ class grain_distribution():
 
         if fixed_thickness:
             for ai, a in enumerate(self.a_tab):
-                result[ai,:] = self.shape_dist_fixed_thickness(a, beta_tab) * a_dist[ai]
+                result[ai,:] = self.shape_dist_fixed_thickness(a, beta_tab, a2=a2, d=d) * a_dist[ai]
         else:
             for ai, a in enumerate(self.a_tab):
-                result[ai,:] = a_dist[ai] * self.shape_dist(a, beta_tab)
+                result[ai,:] = a_dist[ai] * self.shape_dist(a, beta_tab, a2=a2, d=d)
 
         aux = np.sum(result, axis=0)
         ind = aux > 1e-500 # Avoid beta values with very small probability

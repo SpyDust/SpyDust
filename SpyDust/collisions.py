@@ -1,7 +1,7 @@
 from . import SpDust_data_dir
 from .util import cgsconst, makelogtab, DX_over_X
 from .mpiutil import *
-from .Grain import grainparams, N_C, acx
+from .Grain import grainparams, N_C, acx, cylindrical_thickness
 from .charge_dist import Qabs, nu_uisrf
 from .infrared import Temp, Energy_modes, IR_arrays
 
@@ -17,7 +17,7 @@ k = cgsconst.k
 eV = cgsconst.eV
 mp = cgsconst.mp
 
-a2, d = grainparams.a2, grainparams.d
+a2_default = grainparams.a2
 
 pi = np.pi
 
@@ -165,7 +165,7 @@ def Tev_interpol(a, Chi):
     return np.exp(Tev_log_interp)
 
 # Define the Tev_effective function
-def Tev_effective(env, a, get_info=False):
+def Tev_effective(env, a, beta, get_info=False, a2=a2_default):
     """
     Compute the effective evaporation temperature.
 
@@ -178,6 +178,8 @@ def Tev_effective(env, a, get_info=False):
     - Effective evaporation temperature (Tev) or ratio if get_info is True.
     """
     
+    d_layer = grainparams.d
+
     # Check if the constant evaporation temperature is present
     if 'Tev' in env:
         return env['Tev']
@@ -200,9 +202,10 @@ def Tev_effective(env, a, get_info=False):
 
     # Number of sites (Nsites)
     if a < a2:
-        Nsites = N_C(a)  
+        d_grain = cylindrical_thickness(a, beta)
+        Nsites = N_C(a) * d_layer / d_grain
     else:
-        Nsites = N_C(a) * 3 * d / a
+        Nsites = N_C(a) * 3 * d_layer / a
 
     # If `get_info` is True, return the ratio/Nsites
     if get_info:
@@ -217,7 +220,7 @@ def Tev_effective(env, a, get_info=False):
     return Tev
 
 # Define the FGn function
-def FGn(env, a, beta, T_ev, Zg_tab, tumbling=True):
+def FGn(env, a, beta, T_ev, Zg_tab, tumbling=True, a2=a2_default):
     """
     Calculate F_n and G_n for neutral impactors, for an array of grain charges.
     
@@ -246,7 +249,7 @@ def FGn(env, a, beta, T_ev, Zg_tab, tumbling=True):
     Tval = env['T']
     xh = env['xh']
     y = env['y']
-    acx_val = acx(a, beta)  
+    acx_val = acx(a, beta, a2=a2)  
 
     # Calculate e_n and e_e
     e_n = np.sqrt(q**2 / (2 * acx_val**4 * k * Tval) * Zg_tab**2)
@@ -299,7 +302,7 @@ def FGn(env, a, beta, T_ev, Zg_tab, tumbling=True):
 
     return {'Fn': Fn, 'Gn': Gn}
 
-def FGn_averaged(env, a, beta, T_ev, fZ, tumbling=True):
+def FGn_averaged(env, a, beta, T_ev, fZ, tumbling=True, a2=a2_default):
     """
     Compute the averaged Fn and Gn over grain charges given the grain charge distribution.
     
@@ -318,7 +321,7 @@ def FGn_averaged(env, a, beta, T_ev, fZ, tumbling=True):
         tumbling = False
     
     # Call FGn to get Fn and Gn for specific grain charges
-    FGn_result = FGn(env, a, beta, T_ev, fZ[0, :], tumbling=tumbling)
+    FGn_result = FGn(env, a, beta, T_ev, fZ[0, :], tumbling=tumbling, a2=a2)
 
     # Calculate averaged Fn and Gn
     Fn_averaged = np.sum(FGn_result['Fn'] * fZ[1, :])
@@ -430,7 +433,7 @@ def h2(phi, mu_tilde):
     return h2_values
 
 # Define the FGi function
-def FGi(env, a, beta, T_ev, Zg, mu_tab):
+def FGi(env, a, beta, T_ev, Zg, mu_tab, a2=a2_default):
     """
     Compute Fi and Gi for a given grain charge Zg, based on mu_tab.
     
@@ -452,7 +455,7 @@ def FGi(env, a, beta, T_ev, Zg, mu_tab):
     xM = env['xC']  
 
     # Compute acx and mu_tilde
-    acx_val = acx(a, beta)  # Assuming acx(a) is defined elsewhere
+    acx_val = acx(a, beta, a2=a2)  # Assuming acx(a) is defined elsewhere
     mu_tilde = q * mu_tab / (acx_val**2 * k * T)
 
     # Polarizabilities for neutral species corresponding to incoming ions (H and C)
@@ -483,7 +486,7 @@ def FGi(env, a, beta, T_ev, Zg, mu_tab):
 
     return {'Fi': Fi, 'Gi': Gi}
 
-def FGi_averaged(env, a, beta, T_ev, mu_tab, fZ):
+def FGi_averaged(env, a, beta, T_ev, mu_tab, fZ, a2=a2_default):
     """
     Compute the averaged Fi and Gi over grain charges given the grain charge distribution.
     
@@ -509,7 +512,7 @@ def FGi_averaged(env, a, beta, T_ev, mu_tab, fZ):
     # Loop over all grain charges in fZ[0, *]
     for i in range(NZg):
         # Compute Fi and Gi for the current grain charge fZ[0, i]
-        FGi_result = FGi(env, a, beta, T_ev, fZ[0, i], mu_tab)
+        FGi_result = FGi(env, a, beta, T_ev, fZ[0, i], mu_tab, a2=a2)
 
         # Average Fi and Gi by summing over the charge distribution
         Fi += fZ[1, i] * FGi_result['Fi']

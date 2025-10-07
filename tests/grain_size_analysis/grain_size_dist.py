@@ -32,6 +32,33 @@ beta_cylinder = np.linspace(-0.46, -0.2, 40)
 a_tab_ellip = makelogtab(a2, a_max, 40)
 beta_ellip = np.linspace(-0.1, 0.1, 40)
 
+
+# Designa a range of the parameters for grain size distribution:
+#   (1) gamma \in [-2.5, 2.0]
+#   (2) ln_a0 \in [ln(10^-8), ln(10^-6)] (a0 from 1 angstrom to 100 angstrom)
+#   (3) sigma_inv \in [0, 10] (i.e., sigma from 0.1 to infinity)
+#   (4) d \in [0.5 * Grain.d, 2 * Grain.d]
+
+gamma_min = -2.5
+gamma_max = 2.0
+gamma_tab = np.linspace(gamma_min, gamma_max, 20)
+log_a0_min = np.log(1e-8)
+log_a0_max = np.log(1e-6)
+log_a0_tab = np.linspace(log_a0_min, log_a0_max, 20)
+sigma_inv_min = 0
+sigma_inv_max = 5
+sigma_inv_tab = np.linspace(sigma_inv_min, sigma_inv_max, 20)
+d_min = 0.5 * Grain.d
+d_max = 2 * Grain.d
+d_tab = np.linspace(d_min, d_max, 20)
+
+def eval_beta_arbitrary(a, a2, d):
+    if a <= a2:
+        beta_val = Grain.cylindrical_params(a, d)[1]
+    else:
+        beta_val=0.
+    return beta_val
+
 def cache_last_call(func):
     last_args = {"args": None, "kwargs": None, "result": None}
 
@@ -55,17 +82,18 @@ def cache_last_call(func):
     return wrapper
 
 @cache_last_call
-def generate_same_grains_SED(env, a, beta):
+def generate_same_grains_SED(env, a, d):
     # if "a" is a number, return a single SED result; if "a" is a table, return a table of SED results
+    a2 = Grain.a2
     if isinstance(a, (int, float)):
-        result = SpyDust_given_grain_size_shape(env, a, beta, 
+        result = SpyDust_given_grain_size_shape(env, a, eval_beta_arbitrary(a, a2, d), 
                                                 min_freq=0.1, max_freq=100.0, n_freq=200,
                                                 N_angular_Omega=500)
         result_SED = result[1]
     else:
         result_SED = []
         for a_val in a:
-            result = SpyDust_given_grain_size_shape(env, a_val, beta, 
+            result = SpyDust_given_grain_size_shape(env, a_val, eval_beta_arbitrary(a_val, a2, d), 
                                                 min_freq=0.1, max_freq=100.0, n_freq=200,
                                                 N_angular_Omega=500)
             result_SED.append(result[1])
@@ -74,15 +102,56 @@ def generate_same_grains_SED(env, a, beta):
     freqs = result[0]
     return freqs, result_SED
 
-def SED_list_given_SSE(a_tab, beta_tab, env):   
-    # generate the SED list given the tables of grain size (S) a_tab, grain shape (S) beta_tab, and the environment (E)
-    a_beta_tab = np.array(np.meshgrid(a_tab, beta_tab)).T.reshape(-1, 2)
-    SED_list = []
-    for a, beta in a_beta_tab:
-        freqs, result = generate_same_grains_SED(env, a, beta)
-        SED_list.append(result)
-    return freqs,np.array(SED_list)
+def _normalise(w):
+    """Turn any non–negative weight array into a PDF."""
+    w = np.asarray(w, dtype=float)
+    if np.any(w < 0):                       # sanity check
+        raise ValueError("Weights must be non-negative.")
+    s = w.sum()
+    if s == 0:
+        raise ValueError("All weights are zero → cannot normalise.")
+    return w / s
 
+def grain_size_dist(a_list, C, log_a0, sigma_inv):
+    """
+    dn/da propto exp[C lna - 1/2 ((ln(a) - ln(a0))^2 * sigma_inv^2)]
+    """
+    exponent = C * np.log(a_list) - 0.5 * ( (np.log(a_list) - log_a0) * sigma_inv ) ** 2
+    max_exponent = np.max(exponent)
+    exponent -= max_exponent
+    weights = np.exp(exponent)
+    return _normalise(weights)
+
+def generate_grain_ensemble_SED(env, a_list, d, C, log_a0, sigma_inv):
+    a_distribution = grain_size_dist(a_list, C, log_a0, sigma_inv)
+    a_distr_weighted = np.array(a_distribution) * np.array(a_list) 
+    a_distr_weighted /= np.sum(a_distr_weighted)
+    freqs, SED_list = generate_same_grains_SED(env, a_list, d)
+    resultSED = np.sum(a_distr_weighted[:, np.newaxis] * SED_list, axis=0)
+    return freqs, resultSED
+
+def generate_synth_SED(SED_list, a_list, a_distribution, log_spacing_weight=False):
+    if log_spacing_weight: # if the a_list is a even table at log-scale, then we will need to weight the distribution density
+        a_weighted_distribution = np.array(a_distribution) * np.array(a_list) 
+    else:
+        a_weighted_distribution = np.array(a_distribution)
+    a_weighted_distribution /= np.sum(a_weighted_distribution)
+    resultSED = np.sum(a_weighted_distribution[:, np.newaxis] * np.array(SED_list), axis=0)
+    return resultSED
+
+def SED_list_given_env(env, normalise=True):
+    params_list = []
+    SED_list = []
+    for d in d_tab:
+        for C_val in C_tab:
+            for sigma_inv in sigma_inv_tab:
+                for log_a0 in log_a0_tab:
+                    params_list.append((d, C_val, log_a0, sigma_inv))
+                    freqs, result = generate_grain_ensemble_SED(env, a_tab, d, C_val, log_a0, sigma_inv)
+                    if normalise:
+                        result /= np.max(result)
+                    SED_list.append(result)
+    return np.array(params_list), freqs, np.array(SED_list)
 
 from SpyDust.SED_fit import lognormal_sed_fit
 

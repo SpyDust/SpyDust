@@ -1,10 +1,11 @@
-Metadata-Version: 2.2
+Metadata-Version: 2.4
 Name: SpyDust
 Version: 1.2
 Summary: A code for modeling spinning dust radiation
 Home-page: https://github.com/zzhang0123/SpyDust
 Author: Zheng Zhang
-Author-email: zheng.zhang@manchester.ac.uk
+Author-email: Zheng Zhang <zheng.zhang@manchester.ac.uk>
+Project-URL: Homepage, https://github.com/zzhang0123/SpyDust
 Keywords: astrophysics,astronomy
 Classifier: Development Status :: 5 - Production/Stable
 Classifier: License :: OSI Approved :: MIT License
@@ -15,15 +16,8 @@ Requires-Dist: numpy
 Requires-Dist: scipy
 Requires-Dist: mpi4py
 Dynamic: author
-Dynamic: author-email
-Dynamic: classifier
-Dynamic: description
-Dynamic: description-content-type
 Dynamic: home-page
-Dynamic: keywords
-Dynamic: requires-dist
 Dynamic: requires-python
-Dynamic: summary
 
 # SpyDust
 
