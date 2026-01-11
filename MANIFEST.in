@@ -1,0 +1,23 @@
+# Include essential files
+include README.md
+include LICENSE
+include pyproject.toml
+include setup.py
+
+# Include the main package
+recursive-include SpyDust *.py
+recursive-include SpyDust/Data_Files *
+
+# Explicitly exclude paper-products (formerly tests) and other unnecessary files
+prune paper-products
+prune *.egg-info
+prune __pycache__
+prune .git
+prune .github
+prune .vscode
+exclude .DS_Store
+exclude .gitignore
+exclude .gitattributes
+global-exclude *.pyc
+global-exclude __pycache__
+global-exclude .DS_Store

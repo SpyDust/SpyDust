@@ -1,4 +1,7 @@
 __pycache__/
+outdate/
+paper-products/AME_feature_analysis/GSA_and_surrogates/data/
+paper-products/AME_feature_analysis/GSA_and_surrogates/figures/
 SPDUST.2.0
 
 # Large data files

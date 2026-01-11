@@ -12,7 +12,7 @@ long_description = (here / "README.md").read_text(encoding="utf-8")
 
 setup(
     name="SpyDust",  # Required
-    version="1.2",  # Required
+    version="2.0",  # Required
     description="A code for modeling spinning dust radiation",  # Optional
     long_description=long_description,  # Optional
     long_description_content_type="text/markdown",  # Optional (see note above)
@@ -29,10 +29,8 @@ setup(
     #package_dir={"": "SpyDust"},  # Optional
     packages=find_packages(include=["SpyDust", 
                                     "SpyDust.SPDUST_as_is",
-                                    #"SpyDust.core", 
-                                    #"SpyDust.main", 
-                                    #"SpyDust.utils"
-                                    ]),  # Required
+                                    ],
+                           exclude=["paper-products*", "*.egg-info*"]),  # Required
     python_requires=">=3.7, <4",
     # This field lists other packages that your project depends on to run.
     # Any package you put here will be installed by pip when your project is

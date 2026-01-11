@@ -266,7 +266,7 @@ def lognormal_sed_fit_v2(freqs, sed, initial_guess=None, thres=1e-3, brief_retur
         raise RuntimeError(f"Fitting failed: {str(e)}")
   
 
-def fit_sed_ensemble(freqs, sed_ensemble, thres=1e-3, parameter_list=None, v2=True):
+def fit_sed_ensemble(freqs, sed_ensemble, thres=1e-3, parameter_list=None):
     """
     Fit SED ensemble to log-normal model.
     
@@ -282,12 +282,9 @@ def fit_sed_ensemble(freqs, sed_ensemble, thres=1e-3, parameter_list=None, v2=Tr
     if sed_ensemble.ndim == 1:
         sed_ensemble = sed_ensemble.reshape(1, -1)
     n_sed = sed_ensemble.shape[0]
-    if v2:
-        lognormal_sed_fit = lognormal_sed_fit_v2
-        fit_params = np.zeros((n_sed, 3))
-    else:
-        lognormal_sed_fit = lognormal_sed_fit_v1
-        fit_params = np.zeros((n_sed, 2))
+
+    lognormal_sed_fit = lognormal_sed_fit_v1
+    fit_params = np.zeros((n_sed, 2))
 
     from tqdm import tqdm
     for i in tqdm(range(n_sed)):
@@ -354,13 +351,13 @@ def measure_sed_peak_properties(freqs, sed, plot=False, save_path=None, thres=1e
     ft_size = 14
     
     if plot:
-        fig = plt.figure(figsize=(7, 4))
+        fig = plt.figure(figsize=(5, 3))
         ax1 = fig.add_subplot(111)
 
         # Main plot
         f_peak_plot = f_peak
         norm = max(sed)
-        ax1.loglog(freqs, sed/norm, 'o-', label='Data', alpha=0.7)
+        ax1.loglog(freqs, sed/norm, 'o-', label='Simulation', alpha=0.7)
         
         # Show threshold line
         # ax1.axhline(y=fit_quality['threshold_value'], color='gray', linestyle=':', 
@@ -385,7 +382,7 @@ def measure_sed_peak_properties(freqs, sed, plot=False, save_path=None, thres=1e
             ax1.loglog(freq_smooth, fit_smooth_plot/norm, '--', label='Log-Gaussian fit', linewidth=2)
         
         ax1.axvline(f_peak_plot, color='red', linestyle=':', alpha=0.8, 
-                   label=rf'Fitted peak ($\nu_{{\rm p}}$ = {f_peak_plot:.1f} GHz)')
+                   label=rf'Fitted peak')
         ax1.set_xlabel('Frequency [GHz]', fontsize=ft_size)
         ax1.set_xlim(1.5, freqs.max())
         ax1.set_ylabel('SED (normalized)', fontsize=ft_size)
@@ -401,4 +398,167 @@ def measure_sed_peak_properties(freqs, sed, plot=False, save_path=None, thres=1e
         plt.show()
     
     return results
+
+
+def measure_sed_log_moments(freqs, sed, thres=1e-3, excess_kurtosis=True):
+    """Measure the first four moments of an SED profile in logarithmic frequency.
+
+    We interpret the SED as a weighted distribution over logarithmic frequency,
+    keeping only samples with amplitude above ``thres * max(sed)``.  Introducing
+    :math:`x_i = \ln \nu_i` and local spacings :math:`\Delta x_i`, we define
+    weights :math:`w_i = S_i \Delta x_i` and normalized probabilities
+    :math:`p_i = w_i / \sum_j w_j`.  The central moments are then
+
+    .. math::
+
+        \mu_1 = \sum_i p_i x_i,\quad
+        \mu_2 = \sum_i p_i (x_i - \mu_1)^2,\quad
+        \mu_3 = \sum_i p_i (x_i - \mu_1)^3,\quad
+        \mu_4 = \sum_i p_i (x_i - \mu_1)^4.
+
+    We report the mean ``mu_1``, variance ``mu_2``, skewness
+    :math:`\gamma_1 = \mu_3 / \mu_2^{3/2}`, and kurtosis
+    :math:`\kappa = \mu_4 / \mu_2^2` (optionally excess kurtosis ``kappa - 3``).
+
+    Parameters
+    ----------
+    freqs : array_like
+        Frequency grid of the SED (positive values required).
+    sed : array_like
+        Spectral energy density values (non-negative).
+    thres : float, optional
+        Fractional amplitude threshold relative to ``max(sed)`` for selecting
+        samples.  Default is :math:`10^{-3}`.
+    excess_kurtosis : bool, optional
+        If True, subtract 3 from the kurtosis (i.e. return excess kurtosis).
+
+    Returns
+    -------
+    dict
+        Dictionary with keys ``mean``, ``variance``, ``skewness``, ``kurtosis``.
+        The ``kurtosis`` entry respects ``excess_kurtosis``.
+
+    Raises
+    ------
+    ValueError
+        If fewer than four valid samples remain after thresholding or if the
+        second central moment is non-positive.
+    """
+
+    freqs = np.asarray(freqs, dtype=float)
+    sed = np.asarray(sed, dtype=float)
+
+    if freqs.shape != sed.shape:
+        raise ValueError("freqs and sed must have the same shape")
+
+    if np.any(freqs <= 0):
+        raise ValueError("Frequencies must be strictly positive for log-space analysis")
+
+    sed_max = np.max(sed)
+    if sed_max <= 0:
+        raise ValueError("SED must contain positive values")
+
+    threshold = thres * sed_max
+    mask = (sed >= threshold) & np.isfinite(freqs) & np.isfinite(sed)
+    if not np.any(mask):
+        raise ValueError("No samples exceed the requested threshold")
+
+    freqs_sel = freqs[mask]
+    sed_sel = sed[mask]
+
+    if freqs_sel.size < 4:
+        raise ValueError("At least four samples above threshold are required to compute moments")
+
+    log_freq = np.log(freqs_sel)
+
+    # Local spacing in log-frequency (forward/backward difference at the ends).
+    delta = np.empty_like(log_freq)
+    if log_freq.size == 1:
+        delta.fill(1.0)
+    else:
+        delta[1:-1] = 0.5 * (log_freq[2:] - log_freq[:-2])
+        delta[0] = log_freq[1] - log_freq[0]
+        delta[-1] = log_freq[-1] - log_freq[-2]
+
+    weights = sed_sel * np.abs(delta)
+    total_weight = np.sum(weights)
+    if total_weight == 0 or not np.isfinite(total_weight):
+        raise ValueError("Degenerate weights encountered while computing kurtosis")
+
+    probs = weights / total_weight
+
+    mean_log_freq = np.sum(probs * log_freq)
+    centered = log_freq - mean_log_freq
+    m2 = np.sum(probs * centered**2)
+
+    if m2 <= 0:
+        raise ValueError("Second central moment is non-positive; moments undefined")
+
+    m3 = np.sum(probs * centered**3)
+    m4 = np.sum(probs * centered**4)
+
+    skewness = m3 / (m2 ** 1.5)
+    kurtosis = m4 / (m2 ** 2)
+    if excess_kurtosis:
+        kurtosis -= 3.0
+
+    return {
+        'mean': mean_log_freq,
+        'variance': m2,
+        'skewness': skewness,
+        'kurtosis': kurtosis,
+    }
+
+
+def measure_sed_log_moments_batch(freqs, sed_matrix, thres=1e-3, excess_kurtosis=True):
+    """Compute log-space moments for a collection of SEDs.
+
+    Parameters
+    ----------
+    freqs : array_like
+        Shared frequency grid ``(N_freqs,)``. Must contain positive values.
+    sed_matrix : array_like
+        Array of SEDs with shape ``(N_samples, N_freqs)``.
+    thres : float, optional
+        Fractional amplitude threshold used for each SED (default ``1e-3``).
+    excess_kurtosis : bool, optional
+        Pass-through flag to control the kurtosis definition. When ``True``
+        (default) the output reports excess kurtosis.
+
+    Returns
+    -------
+    numpy.ndarray
+        Array with shape ``(N_samples, 4)`` containing ``mean``, ``variance``,
+        ``skewness``, and ``kurtosis`` (or excess kurtosis).
+
+    Notes
+    -----
+    This simply applies :func:`measure_sed_log_moments` row-by-row; any
+    individual failure propagates to the caller.
+    """
+
+    freqs = np.asarray(freqs, dtype=float)
+    sed_matrix = np.asarray(sed_matrix, dtype=float)
+
+    if sed_matrix.ndim != 2:
+        raise ValueError("sed_matrix must be 2D with shape (N_samples, N_freqs)")
+
+    n_samples, n_freqs = sed_matrix.shape
+    if freqs.shape != (n_freqs,):
+        raise ValueError("freqs must have shape (N_freqs,) matching sed_matrix")
+
+    moments = np.empty((n_samples, 4), dtype=float)
+    for idx in range(n_samples):
+        stats = measure_sed_log_moments(
+            freqs,
+            sed_matrix[idx],
+            thres=thres,
+            excess_kurtosis=excess_kurtosis,
+        )
+        moments[idx, 0] = stats['mean']
+        moments[idx, 1] = stats['variance']
+        moments[idx, 2] = stats['skewness']
+        moments[idx, 3] = stats['kurtosis']
+
+    return moments
 

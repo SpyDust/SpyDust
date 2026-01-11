@@ -1,4 +1,3 @@
-from networkx import edges
 from .Grain import N_C, N_H, grain_distribution, grainparams
 from .util import cgsconst, makelogtab
 from .mpiutil import *

@@ -1,3 +1,4 @@
+MANIFEST.in
 README.md
 pyproject.toml
 setup.py
@@ -16,12 +17,10 @@ SpyDust/infrared.py
 SpyDust/mpiutil.py
 SpyDust/plasmadrag.py
 SpyDust/util.py
-SpyDust.egg-info/PKG-INFO
-SpyDust.egg-info/SOURCES.txt
-SpyDust.egg-info/dependency_links.txt
-SpyDust.egg-info/not-zip-safe
-SpyDust.egg-info/requires.txt
-SpyDust.egg-info/top_level.txt
+SpyDust/Data_Files/FIR_integral_charged_30a_30chi.txt
+SpyDust/Data_Files/FIR_integral_neutral_30a_30chi.txt
+SpyDust/Data_Files/GIR_integral_charged_30a_30chi.txt
+SpyDust/Data_Files/GIR_integral_neutral_30a_30chi.txt
 SpyDust/Data_Files/PAHion_read.out
 SpyDust/Data_Files/PAHneu_read.out
 SpyDust/Data_Files/Tev_30a_30chi.txt

@@ -28,6 +28,7 @@ Homepage = "https://github.com/zzhang0123/SpyDust"
 
 [tool.setuptools.packages.find]
 include = ["SpyDust*"]
+exclude = ["paper-products*", "*.egg-info*"]
 
 [tool.setuptools.package-data]
 SpyDust = ["Data_Files/*"]
