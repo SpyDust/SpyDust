@@ -12,7 +12,7 @@ long_description = (here / "README.md").read_text(encoding="utf-8")
 
 setup(
     name="SpyDust",  # Required
-    version="1.3",  # Required
+    version="1.3.1",  # Required
     description="A code for modeling spinning dust radiation",  # Optional
     long_description=long_description,  # Optional
     long_description_content_type="text/markdown",  # Optional (see note above)
