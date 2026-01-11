@@ -12,7 +12,7 @@ long_description = (here / "README.md").read_text(encoding="utf-8")
 
 setup(
     name="SpyDust",  # Required
-    version="2.0",  # Required
+    version="1.3",  # Required
     description="A code for modeling spinning dust radiation",  # Optional
     long_description=long_description,  # Optional
     long_description_content_type="text/markdown",  # Optional (see note above)
@@ -39,7 +39,7 @@ setup(
     # For an analysis of "install_requires" vs pip's requirements files see:
     # https://packaging.python.org/discussions/install-requires-vs-requirements/
     install_requires=[
-        "numpy", 
+        "numpy<2.4", 
         "scipy",
         "mpi4py",
         #"pandas" # not necessary for spinning dust spectra; 
