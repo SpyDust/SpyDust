@@ -134,8 +134,6 @@ def lognormal_sed_fit_v1(freqs, sed, initial_guess=None, thres=1e-3, brief_retur
     except Exception as e:
         raise RuntimeError(f"Fitting failed: {str(e)}")
 
-
-
 def lognormal_sed_fit_v2(freqs, sed, initial_guess=None, thres=1e-3, brief_return=True, return_fit_curve=False):
     """
     Fit a log-normal model to SED data to extract peak frequency and width.
@@ -268,8 +266,6 @@ def lognormal_sed_fit_v2(freqs, sed, initial_guess=None, thres=1e-3, brief_retur
         raise RuntimeError(f"Fitting failed: {str(e)}")
   
 
-
-
 def fit_sed_ensemble(freqs, sed_ensemble, thres=1e-3, parameter_list=None, v2=True):
     """
     Fit SED ensemble to log-normal model.
@@ -358,7 +354,7 @@ def measure_sed_peak_properties(freqs, sed, plot=False, save_path=None, thres=1e
     ft_size = 14
     
     if plot:
-        fig = plt.figure(figsize=(8, 4))
+        fig = plt.figure(figsize=(7, 4))
         ax1 = fig.add_subplot(111)
 
         # Main plot
@@ -386,12 +382,12 @@ def measure_sed_peak_properties(freqs, sed, plot=False, save_path=None, thres=1e
             interp_func = interp1d(freqs[valid_mask], fit_smooth[valid_mask], 
                                  kind='linear', bounds_error=False, fill_value=np.nan)
             fit_smooth_plot = interp_func(freq_smooth)
-            ax1.loglog(freq_smooth, fit_smooth_plot/norm, '--', label='\"Log-normal\" fit', linewidth=2)
+            ax1.loglog(freq_smooth, fit_smooth_plot/norm, '--', label='Log-Gaussian fit', linewidth=2)
         
         ax1.axvline(f_peak_plot, color='red', linestyle=':', alpha=0.8, 
                    label=rf'Fitted peak ($\nu_{{\rm p}}$ = {f_peak_plot:.1f} GHz)')
         ax1.set_xlabel('Frequency [GHz]', fontsize=ft_size)
-        ax1.set_xlim(0.9, freqs.max())
+        ax1.set_xlim(1.5, freqs.max())
         ax1.set_ylabel('SED (normalized)', fontsize=ft_size)
         # No frame legend
         ax1.legend(fontsize=ft_size, loc='upper left', frameon=False)
