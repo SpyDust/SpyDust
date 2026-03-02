@@ -54,6 +54,9 @@ class MC_env:
     y_min = 0.99
     y_max = 0.999
 
+    dipole_per_atom_min = 0.2
+    dipole_per_atom_max = 0.6
+
     def __init__(self):
         pass
 
@@ -65,11 +68,16 @@ class MC_env:
         self.xh_samples = np.random.uniform(self.xh_min, self.xh_max, num)
         self.xC_samples = np.exp(np.random.uniform(np.log(self.xC_min), np.log(self.xC_max), num))
         self.y_samples = np.random.uniform(self.y_min, self.y_max, num)
+        self.dipole_samples =  np.random.uniform(self.dipole_per_atom_min, self.dipole_per_atom_max, num)
 
         self.a_samples = np.exp(np.random.uniform(np.log(self.a_min), np.log(self.a_max), num))
         self.beta_samples = np.random.uniform(self.beta_amin, self.beta_amax, num)
 
-        self.params = np.vstack((self.nh_samples, self.T_samples, self.chi_samples, self.xh_samples, self.xC_samples, self.y_samples, self.a_samples, self.beta_samples)).T
+        # self.params = np.vstack((self.nh_samples, self.T_samples, self.chi_samples, self.xh_samples, self.xC_samples, self.y_samples, self.a_samples, self.beta_samples)).T
+        self.params = np.vstack((self.nh_samples, self.T_samples, self.chi_samples, 
+                                 self.xh_samples, self.xC_samples, 
+                                 self.y_samples, self.dipole_samples,
+                                 self.a_samples, self.beta_samples)).T
         return 
 
     def generate_SED(self, env, a, beta, min_freq=0.1, max_freq=1000.0, n_freq=500, tumbling=True):
@@ -84,7 +92,10 @@ class MC_env:
         """Process a single sample - helper function for parallelization"""
         env = {'nh': self.nh_samples[i], 'T': self.T_samples[i], 'Chi': self.chi_samples[i], 
                'xh': self.xh_samples[i], 'xC': self.xC_samples[i], 'y': self.y_samples[i], 
-               'gamma': 0, 'dipole': 9.3}
+               'gamma': 0, 
+               'dipole_per_atom': self.dipole_samples[i]
+            #    'dipole': 9.3
+               }
         
         freq, result_SED_tumbling = self.generate_SED(env, 
                                                 a=self.a_samples[i], 
@@ -193,24 +204,24 @@ if __name__ == "__main__":
     mc_instance = MC_env()
     freq, tumbling_results, no_tumbling_results = mc_instance.analysis(num=100000, n_jobs=20)
     # Save results to files
-    np.savetxt("data/freq.txt", freq)
-    np.savetxt("data/MC_params.txt", mc_instance.params)
-    np.savetxt("data/MC_SED_tumbling.txt", tumbling_results)
-    np.savetxt("data/MC_SED_no_tumbling.txt", no_tumbling_results)
+    np.savetxt("data_revision/freq.txt", freq)
+    np.savetxt("data_revision/MC_params.txt", mc_instance.params)
+    np.savetxt("data_revision/MC_SED_tumbling.txt", tumbling_results)
+    np.savetxt("data_revision/MC_SED_no_tumbling.txt", no_tumbling_results)
 
     DC_instance = DC_env()
     freq, tumbling_results_DC, no_tumbling_results_DC = DC_instance.analysis(num=100000, n_jobs=20)
     # Save results to files
-    np.savetxt("data/DC_params.txt", DC_instance.params)
-    np.savetxt("data/DC_SED_tumbling.txt", tumbling_results_DC)
-    np.savetxt("data/DC_SED_no_tumbling.txt", no_tumbling_results_DC)
+    np.savetxt("data_revision/DC_params.txt", DC_instance.params)
+    np.savetxt("data_revision/DC_SED_tumbling.txt", tumbling_results_DC)
+    np.savetxt("data_revision/DC_SED_no_tumbling.txt", no_tumbling_results_DC)
 
     HII_instance = HII_env()
     freq, tumbling_results_HII, no_tumbling_results_HII = HII_instance.analysis(num=100000, n_jobs=20)
     # Save results to files
-    np.savetxt("data/HII_params.txt", HII_instance.params)
-    np.savetxt("data/HII_SED_tumbling.txt", tumbling_results_HII)
-    np.savetxt("data/HII_SED_no_tumbling.txt", no_tumbling_results_HII)
+    np.savetxt("data_revision/HII_params.txt", HII_instance.params)
+    np.savetxt("data_revision/HII_SED_tumbling.txt", tumbling_results_HII)
+    np.savetxt("data_revision/HII_SED_no_tumbling.txt", no_tumbling_results_HII)
 
 
 
