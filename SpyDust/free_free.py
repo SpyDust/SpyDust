@@ -24,7 +24,7 @@ def read_gaunt_factor():
 
     # Load the data using pandas
     gff_data_file = SpDust_data_dir + 'gff.dat'
-    data = pd.read_csv(gff_data_file, delim_whitespace=True, comment=';', header=None, names=['gamma2', 'u', 'gff'])
+    data = pd.read_csv(gff_data_file, sep=r'\s+', comment=';', header=None, names=['gamma2', 'u', 'gff'])
 
     # Define dimensions
     Ngamma2 = 41
