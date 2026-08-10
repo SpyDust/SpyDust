@@ -9,3 +9,7 @@ SPDUST.2.0
 *.npy
 *.egg-info/
 .vscode/
+
+# Claude Code local files
+.claudeignore
+CLAUDE.md
