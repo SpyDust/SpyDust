@@ -338,43 +338,33 @@ def g1g2(psi, mu_tilde):
     - mu_tilde: Array of values representing mu_tilde (size Ndipole).
 
     Returns:
-    - Dictionary with g1 and g2 arrays.
+    - Tuple of g1 and g2 arrays.
     """
 
-    # Number of elements in mu_tilde
-    Ndipole = np.size(mu_tilde)
+    mu_tilde = np.atleast_1d(mu_tilde)
+    g1 = np.zeros(mu_tilde.shape)
+    g2 = np.zeros_like(g1)
 
-    # if type is float, convert to array
-    if isinstance(mu_tilde, (int, float)):
-        mu_tilde = np.array([mu_tilde])
-
-    # Initialize g1 and g2 arrays
-    g1 = np.zeros(Ndipole)
-    g2 = np.zeros(Ndipole)
-
-    # Index where mu_tilde <= abs(psi)
-    index = np.where(mu_tilde <= abs(psi))[0]
-    if len(index) > 0:
-        mu_i = mu_tilde[index]
-        if psi < 0:
-            g1[index] = 1 - psi
-            g2[index] = 1 - psi + 0.5 * psi**2 + (1 / 6) * mu_i**2
-        else:
-            if psi > 600:  # To avoid floating underflow
-                g1[index] = 0
-                g2[index] = 0
-            else:
-                g1[index] = np.exp(-psi) * np.sinh(mu_i) / mu_i
-                g2[index] = g1[index]
+    weak = mu_tilde <= abs(psi)
+    if psi < 0:
+        g1[weak] = 1 - psi
+        g2[weak] = 1 - psi + 0.5 * psi**2 + (1/6) * mu_tilde[weak]**2
+    else:
+        # AHD09 Eqs. (90–91): sinh(mu)/mu tends to one at zero dipole.
+        g1[mu_tilde == 0] = np.exp(-psi)
+        finite = weak & (mu_tilde != 0)
+        mu_i = mu_tilde[finite]
+        # Combine the exponentials before evaluation, even for psi = mu >> 1.
+        g1[finite] = np.exp(mu_i - psi) * (-np.expm1(-2*mu_i) / (2*mu_i))
+        g2[weak] = g1[weak]
 
     # Index where mu_tilde > abs(psi)
-    index = np.where(mu_tilde > abs(psi))[0]
-    if len(index) > 0:
+    index = mu_tilde > abs(psi)
+    if np.any(index):
         mu_i = mu_tilde[index]
-        g1[index] = (1 - np.exp(-(psi + mu_i)) + mu_i - psi + 0.5 * (mu_i - psi)**2) / (2 * mu_i)
+        g1[index] = (-np.expm1(-(psi + mu_i)) + mu_i - psi + 0.5 * (mu_i - psi)**2) / (2 * mu_i)
         g2[index] = g1[index] + (mu_i - psi)**3 / (12 * mu_i)
 
-    # Return a dictionary with g1 and g2
     return g1, g2
 
 # Define the h1 function
@@ -390,21 +380,21 @@ def h1(phi, mu_tilde):
     - h1: Computed value based on the formula. Shape depends on the input.
     """
 
-    mu = mu_tilde
-
-    # Calculate u_0
-    u_0 = 0.5 * (-phi + np.sqrt(phi**2 + 4 * mu))
-
-    # Compute the coefficients
+    # At exactly zero dipole AHD09 Eq. (106) gives the DL98 limit.
+    mu_tilde = np.asarray(mu_tilde)
     DL98 = 1 + np.sqrt(pi) / 2 * phi
-    coeff_1 = mu / 4 + phi**2 / (4 * mu) + (1 - mu) / (2 * mu)
-    coeff_erf = np.sqrt(pi) * phi * (3 - 2 * mu) / (8 * mu)
-    coeff_exp = -(4 + phi**2 + phi * np.sqrt(phi**2 + 4 * mu)) / (8 * mu)
+    result = np.full(mu_tilde.shape, DL98)
+    nonzero = mu_tilde != 0
+    mu = mu_tilde[nonzero]
 
-    # Compute the result for h1
-    h1_result = DL98 + coeff_1 + coeff_erf * erf(u_0) + coeff_exp * np.exp(-u_0**2)
-
-    return h1_result
+    # Rationalizing u removes subtraction of two nearly equal roots. Combine
+    # the constant and exponential terms before division by the dipole.
+    u = 2 * mu / (phi + np.sqrt(phi**2 + 4*mu))
+    phi_u = phi * u
+    numerator = (np.sqrt(pi) * phi * (3 - 2*mu) * erf(u) - 2*phi_u
+                 - (4 + 2*phi**2 + 2*phi_u) * np.expm1(-u**2))
+    result[nonzero] = DL98 + mu/4 - 0.5 + numerator/(8*mu)
+    return result[()]
 
 def h2(phi, mu_tilde):
     """
@@ -418,19 +408,22 @@ def h2(phi, mu_tilde):
     - Array of h2 values corresponding to the input phi and mu_tilde.
     """
     
-    mu = mu_tilde
+    # At exactly zero dipole AHD09 Eq. (107) gives the DL98 limit.
+    mu_tilde = np.asarray(mu_tilde)
+    DL98 = 1 + 3 * np.sqrt(np.pi) / 4 * phi + 0.5 * phi**2
+    result = np.full(mu_tilde.shape, DL98)
+    nonzero = mu_tilde != 0
+    mu = mu_tilde[nonzero]
 
-    # Calculate intermediate values
-    u_0 = 0.5 * (-phi + np.sqrt(phi**2 + 4 * mu))
-    Dl98 = 1 + 3 * np.sqrt(np.pi) / 4 * phi + 0.5 * phi**2
-    coeff_1 = mu**2 / 12 + mu / 4 + phi**2 / (2 * mu) + (1 - mu) / (2 * mu) - phi**2 / 4
-    coeff_erf = np.sqrt(np.pi) * phi / (32 * mu) * (4 * mu**2 - 12 * mu + 15 + 2 * phi**2)
-    coeff_exp = (phi**2 * (2 * mu - 9) - 16 + (2 * mu - 7) * phi * np.sqrt(phi**2 + 4 * mu)) / (32 * mu)
-
-    # Compute h2
-    h2_values = Dl98 + coeff_1 + coeff_erf * erf(u_0) + coeff_exp * np.exp(-u_0**2)
-
-    return h2_values
+    # As in h1, the original 1/mu terms cancel at small dipole.
+    u = 2 * mu / (phi + np.sqrt(phi**2 + 4*mu))
+    phi_u = phi * u
+    exp_coeff = 4*mu*phi**2 - 16*(phi**2 + 1) + (4*mu - 14)*phi_u
+    numerator = ((4*mu - 14)*phi_u
+                 + np.sqrt(pi)*phi*(4*mu**2 - 12*mu + 15 + 2*phi**2)*erf(u)
+                 + exp_coeff*np.expm1(-u**2))
+    result[nonzero] = DL98 + mu**2/12 + mu/4 - 0.5 - phi**2/8 + numerator/(32*mu)
+    return result[()]
 
 # Define the FGi function
 def FGi(env, a, beta, T_ev, Zg, mu_tab, a2=a2_default):
@@ -456,7 +449,7 @@ def FGi(env, a, beta, T_ev, Zg, mu_tab, a2=a2_default):
 
     # Compute acx and mu_tilde
     acx_val = acx(a, beta, a2=a2)  # Assuming acx(a) is defined elsewhere
-    mu_tilde = q * mu_tab / (acx_val**2 * k * T)
+    mu_tilde = q * np.asarray(mu_tab) / (acx_val**2 * k * T)
 
     # Polarizabilities for neutral species corresponding to incoming ions (H and C)
     a0 = 0.53e-8  # Bohr radius in cm
@@ -503,8 +496,9 @@ def FGi_averaged(env, a, beta, T_ev, mu_tab, fZ, a2=a2_default):
     """
 
     # Initialize Fi and Gi as arrays of zeros with the same dimensions as mu_tab
-    Fi = np.zeros_like(mu_tab).reshape(-1)
-    Gi = np.zeros_like(mu_tab).reshape(-1)
+    mu_tab = np.atleast_1d(np.asarray(mu_tab, dtype=float))
+    Fi = np.zeros_like(mu_tab)
+    Gi = np.zeros_like(mu_tab)
 
     # Number of grain charge values in fZ
     NZg = fZ.shape[1]

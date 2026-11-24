@@ -245,12 +245,12 @@ def Inertia_largest(a, beta, a2=a2):
     Calculate the largest moment of inertia.
     '''
 
-    I_ref = Inertia_ref(a, beta, a2=a2)
+    return Inertia_ref(a, beta, a2=a2) / inertia_ref_over_largest(beta)
 
-    if beta < 0:
-        return Inertia_z(I_ref, beta)
-    else:
-        return I_ref
+
+def inertia_ref_over_largest(beta):
+    """Iref/Imax for an axisymmetric grain with I3 = Iref/(1+beta)."""
+    return min(1.0, 1.0 + beta)
     
 #@njit
 def rms_dipole(a, beta, Z2, mole_dipole, a2=a2):
@@ -299,6 +299,7 @@ def apodized_Gaussian_dist(x, centre, sigma, right_half = False):
         return result
 
 class grain_distribution():
+    default_Nbeta = 101
     bc, alpha_g, beta_g, at_g, ac_g, C_g = None, None, None, None, None, None
 
     def __init__(self, a_min=3.5e-8, a_max=3.5e-7, Na=30): # Default settings for grain size distribution
@@ -357,70 +358,36 @@ class grain_distribution():
         Note that this is a conditional distribution, given the grain size.
         We assume a Gaussian distribution apodized by a cosine function.
         '''
-        if a <= a2:
-            beta_min = cylindrical_params(a, d)[1]
-            sigma = 0.1
-            # Calculate the distribution
-            dist = np.zeros_like(beta_tab)
-            for i, beta in enumerate(beta_tab):
-                dist[i] = apodized_Gaussian_dist(beta, beta_min, sigma, right_half=True)
-            # Normalize the distribution
-            dist /= np.sum(dist)
-            return dist
-        else:
-            sigma = 0.025
-            dist = np.zeros_like(beta_tab)
-            for i, beta in enumerate(beta_tab):
-                dist[i] = apodized_Gaussian_dist(beta, 0, sigma)
-            dist /= np.sum(dist)
-            return dist
+        disk = a <= a2
+        centre = eval_beta(a, a2=a2, d=d)
+        sigma = 0.1 if disk else 0.025
+        weights = np.array([
+            apodized_Gaussian_dist(beta, centre, sigma, right_half=disk)
+            for beta in beta_tab
+        ])
+        total = weights.sum()
+        if total <= 0:
+            raise ValueError("The beta grid misses the shape distribution. Increase Nbeta.")
+        return weights / total
 
-    
     @staticmethod
-    #@njit 
     def shape_dist_fixed_thickness(a, beta_tab, a2=a2, d=d):
-        '''
-        The distribution of the grain shape parameter, beta, if we fix the thickness of the disk as d. 
-        Note that this is a conditional distribution, given the grain size.
-        We assume a Gaussian distribution apodized by a cosine function.
-        '''
-        if a <= a2:
-            beta = cylindrical_params(a, d)[1]
-            dist = np.zeros_like(beta_tab)
-            # find the index of the element closest to beta in beta_tab
-            idx = np.abs(beta_tab - beta).argmin()
-            dist[idx] = 1
-            return dist
-        else:
-            dist = np.zeros_like(beta_tab)
-            # find the index of the element closest to 0 in beta_tab
-            idx = np.abs(beta_tab).argmin()
-            dist[idx] = 1
-            return dist
+        """Project the fixed-thickness shape onto the nearest node of a supplied grid."""
+        weights = np.zeros(len(beta_tab))
+        weights[np.argmin(np.abs(np.asarray(beta_tab) - eval_beta(a, a2=a2, d=d)))] = 1.
+        return weights
 
-    def shape_and_size_dist(self, line, a_weighted=True, normalize=False, Nbeta=5, fixed_thickness=False, a2=a2, d=d):
-        '''
-        Calculate the joint distribution of the grain shape parameter, beta, and the grain size, a.
+    def shape_and_size_dist(self, line, a_weighted=True, normalize=False,
+                            Nbeta=default_Nbeta, fixed_thickness=False, a2=a2, d=d):
+        """Return joint size and shape weights, with shape nodes in `self.beta_tab`.
 
-        Parameters:
-        -----------
-        line: int
-            The line of the size distribution table.
-        
-        a_weighted: bool
-            If True, the grain size distribution is weighted and we get f(a)da;
-            otherwise, we get f(a).
-
-        Returns:
-        --------
-        A 2D array with the joint distribution.
-        '''
+        `line` is the zero-based WD01 table row. With `a_weighted=True`, each
+        row includes its size-bin width. Nbeta sets the uniform ensemble grid
+        resolution before empty columns are removed. Fixed-thickness grains
+        use their exact conditional beta, independent of this resolution.
+        """
         size_func = self.size_dist_func(line)
-        beta_tab = np.linspace(-0.49, 0.1, Nbeta)
-        result = np.zeros((len(self.a_tab), len(beta_tab)))
-        a_dist = np.zeros_like(self.a_tab)
-        for ai, a in enumerate(self.a_tab):
-            a_dist[ai] = size_func(a)
+        a_dist = np.array([size_func(a) for a in self.a_tab])
         if a_weighted:
             a_dist = a_dist * self.Da_over_a * self.a_tab
         if normalize:
@@ -428,16 +395,22 @@ class grain_distribution():
         self.a_dist = a_dist
 
         if fixed_thickness:
-            for ai, a in enumerate(self.a_tab):
-                result[ai,:] = self.shape_dist_fixed_thickness(a, beta_tab, a2=a2, d=d) * a_dist[ai]
+            fixed_beta = [eval_beta(a, a2=a2, d=d) for a in self.a_tab]
+            beta_tab, indices = np.unique(fixed_beta, return_inverse=True)
+            result = np.zeros((len(self.a_tab), len(beta_tab)))
+            result[np.arange(len(self.a_tab)), indices] = a_dist
         else:
-            for ai, a in enumerate(self.a_tab):
-                result[ai,:] = a_dist[ai] * self.shape_dist(a, beta_tab, a2=a2, d=d)
+            if not isinstance(Nbeta, (int, np.integer)) or Nbeta < 2:
+                raise ValueError("Nbeta must be an integer of at least 2.")
+            # Cover the toy model's support also for non-default disk thicknesses.
+            disk_centres = [eval_beta(a, a2=a2, d=d) for a in self.a_tab if a <= a2]
+            lower = min([-0.49, *disk_centres])
+            upper = max([0.1, *(b + 0.2 for b in disk_centres)])
+            beta_tab = np.linspace(lower, upper, Nbeta)
+            beta_tab[np.abs(beta_tab) < np.finfo(float).eps] = 0.
+            result = np.array([self.shape_dist(a, beta_tab, a2=a2, d=d)
+                               for a in self.a_tab]) * a_dist[:, None]
 
-        aux = np.sum(result, axis=0)
-        ind = aux > 1e-500 # Avoid beta values with very small probability
-
-        self.beta_tab = beta_tab[ind]
-        return result[:, ind] 
-
-        
+        populated = np.any(result > 0., axis=0)
+        self.beta_tab = beta_tab[populated]
+        return result[:, populated]

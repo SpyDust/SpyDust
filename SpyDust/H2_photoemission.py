@@ -95,13 +95,15 @@ def FGpeZ(env, a, beta, Z, a2=a2_default):
         E_low = E_min_val * eV
         E_high = (E_min_val + hnu_pet_tab - hnu_pet_val) * eV
         Epe = 0.5 * (E_high + E_low)  # In erg
-        second_term = Dnu_over_nu_pdt * np.sum(sigma_pdt(hnu_pdt_tab, Z, a) * nu_uisrf(hnu_pdt_tab) / eV / hnu_pdt_tab 
-                                               * (hnu_pdt_tab - hnu_pdt_val + E_min_val))
+        # WD01b Eq. (40): photon flux per d ln(nu) times electron energy in erg.
+        flux_pdt = c * nu_uisrf(hnu_pdt_tab) / (hnu_pdt_tab * eV)
+        energy_pdt = (hnu_pdt_tab - hnu_pdt_val + E_min_val) * eV
+        second_term = Dnu_over_nu_pdt * np.sum(sigma_pdt(hnu_pdt_tab, Z, a) * flux_pdt * energy_pdt)
         third_term = Jpeneg[int(-Z)] * (Z + 1) * q**2 / asurf_val
 
     first_term = c * np.pi * a**2 * Dnu_over_nu_pet * np.sum(Ytab * Qtab * nu_uisrf(hnu_pet_tab) / eV / hnu_pet_tab * Epe)
 
-    Gpe = me / (4 * nh * np.sqrt(8 * np.pi * mp * k * T) * asurf_val**2 * k * T) * (first_term + second_term + third_term)
+    Gpe = me / (4 * nh * np.sqrt(8 * np.pi * mp * k * T) * asurf_val**2 * k * T) * (Chi * (first_term + second_term) + third_term)
 
     # --- Fpe ---
     if Z >= 0:

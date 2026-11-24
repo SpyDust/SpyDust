@@ -2,6 +2,7 @@ import numpy as np
 from scipy.special import kv as beselk
 
 from . import SpDust_data_dir
+from ._small_e import compute_small_e, small_e_tables as _small_e_tables, table_attribute as __getattr__
 from .util import cgsconst, makelogtab, maketab, DX_over_X
 from .Grain import acx, Inertia_largest, grainparams
 
@@ -16,11 +17,6 @@ q = cgsconst.q
 pi = np.pi
 I = 1j  # complex number equivalent to IDL's "I = complex(0d, 1d)"
 a2 = grainparams.a2
-
-class smalletabs:
-    smalle_tab = None
-    Gamma_tab = None
-    Gamma_max = None
 
 class plasma_tabs:
     Ipos_tab = None
@@ -48,76 +44,6 @@ class gp_arrays:
     gp_pos, gp_neg, gp_neutral = None, None, None
 
 
-def compute_small_e():
-    
-    # Create arrays
-    gamma_min = 1e-20
-    gamma_max = 10 ** 1.5
-    Ngamma = 300
-    Gamma_tab = makelogtab(gamma_min, gamma_max, Ngamma)
-    smalle_tab = np.zeros(Ngamma)  # Equivalent to dblarr in IDL
-    
-    # Parameters
-    Ny = 20000
-    ymed = 1.0
-    ymax = 1e20
-    
-    # Create u and Du arrays
-    u_part_1 = maketab(0, ymed, Ny)
-    u_part_2 = makelogtab(ymed, ymax, Ny)
-    u = np.exp(I * pi / 6) * np.concatenate((u_part_1, u_part_2))
-    
-    # Differential array Du
-    Du_part_1 = ymed / Ny + np.zeros(Ny)
-    Du_part_2 = DX_over_X(ymed, ymax, Ny) * u_part_2
-    Du = np.exp(I * pi / 6) * np.concatenate((Du_part_1, Du_part_2))
-    
-    # Function components
-    fcos = (u ** 2 - 1) / (u ** 2 + 1) ** 2
-    fsin = u / (u ** 2 + 1) ** 2
-    
-    # Main computation loop
-    """
-    for ig in range(Ngamma):
-        Gamma = Gamma_tab[ig]
-        time = Gamma * (u + u ** 3 / 3)
-        
-        # Integrals
-        intcos = 4 * np.sum(np.real(np.exp(I * time) * fcos * Du)) ** 2
-        intsin = 16 * np.sum(np.imag(np.exp(I * time) * fsin * Du)) ** 2
-        
-        # Store results in smalle_tab
-        smalle_tab[ig] = intcos + intsin    
-    """
-
-    # Define function for parallel computation
-    def compute_small_e_parallel(ig):
-        Gamma = Gamma_tab[ig]
-        time = Gamma * (u + u ** 3 / 3)
-        
-        # Integrals
-        intcos = 4 * np.sum(np.real(np.exp(I * time) * fcos * Du)) ** 2
-        intsin = 16 * np.sum(np.imag(np.exp(I * time) * fsin * Du)) ** 2
-        
-        return intcos + intsin
-    
-    # Parallel computation
-    smalle_tab = np.array(parallel_map(compute_small_e_parallel, list(range(Ngamma))))
-    
-    # Output the maximum gamma for debugging purposes
-    gamma_max = np.max(Gamma_tab)
-    
-    return Gamma_tab, smalle_tab, gamma_max
-
-# Call `compute_small_e` to get the values for small e_1, Zg < 0
-Gamma_tab, smalle_tab, Gamma_max = compute_small_e()
-smalletabs.Gamma_tab = Gamma_tab
-smalletabs.smalle_tab = smalle_tab
-smalletabs.Gamma_max = Gamma_max
-if rank0:
-    print("I(Zg<0, parabolic) stored")
-
-#@njit
 def replace_zeros(Ipos_tab):
     """
     Replace zeros in a 2D array with a small value (1e-30), element by element.
@@ -133,17 +59,20 @@ def replace_zeros(Ipos_tab):
 def compute_int_plasma():
     file_path = os.path.join(SpDust_data_dir, 'int_plasma.npz')
     if os.path.exists(file_path):
-        data = np.load(file_path)
-        Ipos_tab = data['Ipos_tab']
-        Ineg_tab = data['Ineg_tab']
-        rot_tab = data['rot_tab']
-        e_1tab = data['e_1tab']
-        rot_min = data['rot_min']
-        rot_max = data['rot_max']
-        e_1min = data['e_1min']
-        e_1max = data['e_1max']
+        with np.load(file_path) as data:
+            Ipos_tab = data['Ipos_tab']
+            Ineg_tab = data['Ineg_tab']
+            rot_tab = data['rot_tab']
+            e_1tab = data['e_1tab']
+            rot_min = data['rot_min']
+            rot_max = data['rot_max']
+            e_1min = data['e_1min']
+            e_1max = data['e_1max']
         return Ipos_tab, Ineg_tab, rot_tab, e_1tab, rot_min, rot_max, e_1min, e_1max
     
+    tables = _small_e_tables()
+    Gamma_tab, smalle_tab, Gamma_max = tables.Gamma_tab, tables.smalle_tab, tables.Gamma_max
+
     # Create arrays
     e_1min = 1e-15
     e_1max = 1e4
@@ -267,6 +196,7 @@ def compute_int_plasma():
         np.savez(file_path, Ipos_tab=Ipos_tab, Ineg_tab=Ineg_tab, rot_tab=rot_tab, e_1tab=e_1tab,
              rot_min=rot_min, rot_max=rot_max, e_1min=e_1min, e_1max=e_1max)
 
+    barrier()
     return Ipos_tab, Ineg_tab, rot_tab, e_1tab, rot_min, rot_max, e_1min, e_1max
 
 
@@ -283,8 +213,6 @@ plasma_tabs.e_1min = e_1min
 plasma_tabs.e_1max = e_1max
 if rank0:
     print('I(rot, e, Zg <> 0) stored')
-
-barrier()
 
 def int_plasma(rot_new, e_1_new, Zg):
     """
@@ -459,8 +387,8 @@ def little_gp_neutral(phi, Omega):
         else:
             return 0.0
         
-    # Parallel computation
-    Int_c = np.array(parallel_map(compute_integral, list(range(Nu))))
+    # Each rank owns its phi from the outer table-building loop.
+    Int_c = np.array([compute_integral(i) for i in range(Nu)])
 
     # Final integral over u
     result = 2.0 * Du_over_u * np.sum(u_tab**2 * np.exp(-u_tab**2) * Int_c )
@@ -547,11 +475,11 @@ def compute_little_gp():
     gp_arrays.gp_pos = gp_pos
     gp_arrays.gp_neg = gp_neg
     gp_arrays.gp_neutral = gp_neutral
+    barrier()
 
     return 
 
 compute_little_gp()
-barrier()
 
 Npsi = gp_arrays.Npsi
 NOmega = gp_arrays.NOmega
@@ -564,87 +492,45 @@ gp_pos = gp_arrays.gp_pos
 gp_neg = gp_arrays.gp_neg
 
 
-def loop_charged(ipsi, psi_arr, NOmega_arr, psi_indices, psi_coeff, Omega_indices, Omega_coeff, gp_pos, gp_neg):
-    result = np.zeros(NOmega_arr)
-    psi_indices_charged = psi_indices[ipsi]
-    psi_coeff_charged = psi_coeff[ipsi]
-    Omega_indices_charged = Omega_indices[ipsi, :]
-    Omega_coeff_charged = Omega_coeff[ipsi, :]
+_psi_grid = makelogtab(psi_min, psi_max, Npsi)
+_omega_grid = makelogtab(Omega_min, Omega_max, NOmega)
 
-    if psi_arr[ipsi] > 0:
-        result = np.exp(psi_coeff_charged * (Omega_coeff_charged * np.log(gp_pos[psi_indices_charged, Omega_indices_charged]) + 
-                        (1 - Omega_coeff_charged) * np.log(gp_pos[psi_indices_charged, Omega_indices_charged + 1])) +
-                        (1 - psi_coeff_charged) * (Omega_coeff_charged * np.log(gp_pos[psi_indices_charged + 1, Omega_indices_charged]) + 
-                        (1 - Omega_coeff_charged) * np.log(gp_pos[psi_indices_charged + 1, Omega_indices_charged + 1]))
-                        )
-    elif psi_arr[ipsi] < 0:
-        result = np.exp(
-            psi_coeff_charged * (Omega_coeff_charged * np.log(gp_neg[psi_indices_charged, Omega_indices_charged]) + 
-                             (1 - Omega_coeff_charged) * np.log(gp_neg[psi_indices_charged, Omega_indices_charged + 1])) +
-            (1 - psi_coeff_charged) * (Omega_coeff_charged * np.log(gp_neg[psi_indices_charged + 1, Omega_indices_charged]) + 
-                               (1 - Omega_coeff_charged) * np.log(gp_neg[psi_indices_charged + 1, Omega_indices_charged + 1]))
-            )
-    return result
+
+def _log_grid_weights(values, grid, lower, upper):
+    """Indices and left-node weights on a logarithmic cell-centred table."""
+    values = np.clip(values, grid[0], grid[-1])
+    log_range = np.log(upper / lower)
+    position = grid.size * np.log(values / lower) / log_range - 0.5
+    index = np.clip(np.floor(position).astype(np.intp), 0, grid.size - 2)
+    weight = 1 - grid.size * np.log(values / grid[index]) / log_range
+    return index, np.clip(weight, 0., 1.)
+
+
+def loop_charged(ipsi, psi_arr, NOmega_arr, psi_indices, psi_coeff, Omega_indices, Omega_coeff, gp_pos, gp_neg):
+    """Interpolate one signed charge row of the logarithmic table."""
+    if psi_arr[ipsi] == 0:
+        return np.zeros(NOmega_arr)
+    table = gp_pos if psi_arr[ipsi] > 0 else gp_neg
+    i, wi = psi_indices[ipsi], psi_coeff[ipsi]
+    j, wj = Omega_indices[ipsi], Omega_coeff[ipsi]
+    left = wj * np.log(table[i, j]) + (1 - wj) * np.log(table[i, j + 1])
+    right = wj * np.log(table[i + 1, j]) + (1 - wj) * np.log(table[i + 1, j + 1])
+    return np.exp(wi * left + (1 - wi) * right)
 
 
 def little_gp_charged_interpol(psi_arr, Omega_arr):
-    """
-    Parameters:
-    - psi_arr: Array of grain potentials
-    - Omega_arr: Array of grain rotation frequencies
-
-    Returns:
-    - gp_charged: Interpolated values of gp_charged for the input psi_arr and Omega_arr
-    should be a 2D array of size (Npsi, NOmega)
-    """
-
-    psi_tab = makelogtab(psi_min, psi_max, Npsi)
-    Omega_tab = makelogtab(Omega_min, Omega_max, NOmega)
-
-
-    # Finding the indices and coefficients for psi
-    aux = np.floor(Npsi * np.log(np.absolute(psi_arr) / psi_min) / np.log(psi_max / psi_min) - 0.5)
-    psi_indices = np.array([np.int64(x) for x in aux])
-    psi_indices = np.clip(psi_indices, 0, Npsi - 2)
-
-    psi_coeff = 1 - Npsi * np.log(np.absolute(psi_arr) / psi_tab[psi_indices]) / np.log(psi_max / psi_min)
-    psi_coeff = np.clip(psi_coeff, 0, 1)
-
-    # Finding the indices and coefficients for Omega
-    aux = np.floor(NOmega * np.log(Omega_arr / Omega_min) / np.log(Omega_max / Omega_min) - 0.5)
-    Omega_indices = np.array([np.int64(x) for x in aux])
-    Omega_indices = np.clip(Omega_indices, 0, NOmega - 2)
-
-    Omega_coeff = 1 - NOmega * np.log(Omega_arr / Omega_tab[Omega_indices]) / np.log(Omega_max / Omega_min)
-    Omega_coeff = np.clip(Omega_coeff, 0, 1)
-
-    # Initializing the result array
-    Npsi_arr = np.size(psi_arr)
-    NOmega_arr = np.size(Omega_arr)
-    gp_charged = np.zeros((Npsi_arr, NOmega_arr))
-
-    # Expand psi_indices and Omega_indices across the appropriate dimensions
-    # Multiply psi_indices across the NOmega_arr dimension
-    psi_indices = psi_indices.reshape(-1, 1) @ np.ones((1, NOmega_arr), dtype=np.int64)
-
-    # Multiply Omega_indices across the Npsi_arr dimension
-    Omega_indices = np.ones((Npsi_arr, 1), dtype=np.int64) @ Omega_indices.reshape(1, -1)
-
-    # Step 4: Expand psi_coeff and Omega_coeff similarly across the dimensions
-    # Expand psi_coeff across the NOmega_arr dimension
-    psi_coeff = psi_coeff.reshape(-1, 1) @ np.ones((1, NOmega_arr))
-
-    # Expand Omega_coeff across the Npsi_arr dimension
-    Omega_coeff = np.ones((Npsi_arr, 1)) @ Omega_coeff.reshape(1, -1)
-    
-    # gp_charged = np.array(parallel_map(loop_charged, list(range(Npsi_arr))))
-    
-    # Not to do parallel computation
-
-    for ipsi in range(Npsi_arr):
-        gp_charged[ipsi, :] = loop_charged(ipsi, psi_arr, NOmega_arr, psi_indices, psi_coeff, Omega_indices, Omega_coeff, gp_pos, gp_neg)
-
-    return gp_charged # shape: [Npsi_arr, NOmega_arr]
+    """Return charged-grain coefficients on the (potential, frequency) grid."""
+    psi_indices, psi_coeff = _log_grid_weights(np.abs(psi_arr), _psi_grid, psi_min, psi_max)
+    omega_indices, omega_coeff = _log_grid_weights(Omega_arr, _omega_grid, Omega_min, Omega_max)
+    shape = (len(psi_arr), len(Omega_arr))
+    # Each charge uses the same frequency grid. Broadcast these arrays as views.
+    omega_indices = np.broadcast_to(omega_indices, shape)
+    omega_coeff = np.broadcast_to(omega_coeff, shape)
+    result = np.empty(shape)
+    for i in range(shape[0]):
+        result[i] = loop_charged(i, psi_arr, shape[1], psi_indices, psi_coeff,
+                                 omega_indices, omega_coeff, gp_pos, gp_neg)
+    return result
 
 
 phi_min = gp_arrays.phi_min
@@ -655,50 +541,15 @@ Omega_max = gp_arrays.Omega_max
 NOmega = gp_arrays.NOmega
 gp_neutral = gp_arrays.gp_neutral
 
-#@jit
+_phi_grid = makelogtab(phi_min, phi_max, Nphi)
+
+
 def little_gp_neutral_interpol(phi, Omega_arr):
-    """
-    Parameters:
-    - phi: Grain potential
-    - Omega_arr: Array of grain rotation frequencies
-
-    Returns:
-    - gp_neu: Interpolated values of gp_neutral for the input phi and Omega_arr
-    should be a 1D array of the same size as Omega_arr
-    """
-
-    phi_tab = makelogtab(phi_min, phi_max, Nphi)
-    Omega_tab = makelogtab(Omega_min, Omega_max, NOmega)
-
-    # Find the index and coefficient for phi
-    phi_index = int(np.floor(Nphi * np.log(phi / phi_min) / np.log(phi_max / phi_min) - 0.5))
-    #phi_index = np.max((0, np.min((phi_index, Nphi - 2))))  # Ensure phi_index is within bounds
-    phi_index = np.maximum(0, np.minimum(phi_index, Nphi - 2))  # Ensure phi_index is within bounds
-
-    # Calculate interpolation coefficient for phi
-    phi_coeff = 1 - Nphi * np.log(phi / phi_tab[phi_index]) / np.log(phi_max / phi_min)
-    #phi_coeff = np.clip(phi_coeff, 0, 1)  # Clamp phi_coeff between 0 and 1
-    phi_coeff = np.maximum(0, phi_coeff)
-    phi_coeff = np.minimum(1, phi_coeff)
-    
-    # Find indices and coefficients for Omega
-    # Omega_indices = np.int64(np.floor(NOmega * np.log(Omega_arr / Omega_min) / np.log(Omega_max / Omega_min) - 0.5))
-    Omega_indices = np.array([int(x) for x in np.floor(NOmega * np.log(Omega_arr / Omega_min) / np.log(Omega_max / Omega_min) - 0.5)])
-    Omega_indices = np.clip(Omega_indices, 0, NOmega - 2)  # Ensure Omega_indices are within bounds
-    #Omega_indices = np.maximum(0, np.minimum(Omega_indices, NOmega - 2))  # Ensure Omega_indices are within bounds
-
-    # Calculate interpolation coefficients for Omega
-    Omega_coeff = 1 - NOmega * np.log(Omega_arr / Omega_tab[Omega_indices]) / np.log(Omega_max / Omega_min)
-    Omega_coeff = np.clip(Omega_coeff, 0, 1)  # Clamp Omega_coeff between 0 and 1
-    #Omega_coeff = np.maximum(0, Omega_coeff)
-    #Omega_coeff = np.minimum(1, Omega_coeff)
-
-    # Interpolate gp_neutral values for phi
-    gp_neu_phi = phi_coeff * gp_neutral[phi_index, :] + (1 - phi_coeff) * gp_neutral[phi_index + 1, :]
-
-    # Return interpolated values for gp_neutral
-    return Omega_coeff * gp_neu_phi[Omega_indices] + (1 - Omega_coeff) * gp_neu_phi[Omega_indices + 1]
-
+    """Interpolate neutral-grain coefficients on the log-spaced table axes."""
+    i, wi = _log_grid_weights(phi, _phi_grid, phi_min, phi_max)
+    j, wj = _log_grid_weights(Omega_arr, _omega_grid, Omega_min, Omega_max)
+    row = wi * gp_neutral[i] + (1 - wi) * gp_neutral[i + 1]
+    return wj * row[j] + (1 - wj) * row[j + 1]
 
 
 #@jit
@@ -731,8 +582,9 @@ def Gp_per_mu2_averaged(temp, xh, xC, a, beta, fZ, omega_vec, a2=a2):
 
     # Neutral grain contribution
     phi = np.sqrt(2 / (acx_val * k * temp)) * q
-    little_gp_H = fZ[1, 0] * little_gp_neutral_interpol(phi, Omega_H) # shape: [Nomega]
-    little_gp_C = fZ[1, 0] * little_gp_neutral_interpol(phi, Omega_C)
+    f0 = fZ_arr[Zg_arr == 0].sum()
+    little_gp_H = f0 * little_gp_neutral_interpol(phi, Omega_H) # shape: [Nomega]
+    little_gp_C = f0 * little_gp_neutral_interpol(phi, Omega_C)
 
     # Charged grain contribution
     ind_charged = np.where(Zg_arr != 0)[0]
@@ -752,59 +604,59 @@ def FGp_averaged(env, a, beta, fZ, omega_vec, mu_ip, mu_op, tumbling=True, a2=a2
     """
     Returns a structure {Fp, Gp} with each element as an array of dimensions [Nomega, Nmu].
     (Averaged over grain charges.)
-    If tumbling is True, disklike tumbling grain is used.
+    Uses the paper's Eqs. (42–46) convention, with tau_H proportional to I3.
 
     Parameters:
     - env: Environment containing T, xh, and xC.
     - a: Grain size.
     - fZ: Grain charge distribution array.
-    - omega_vec: Frequency values.
-    - mu_ip, mu_op: Arrays of internal and external dipole moments.
+    - omega_vec: L/I3, where I3 is the moment about the body symmetry axis.
+    - mu_ip, mu_op: Dipole magnitudes in the equatorial plane and along the body axis.
     - tumbling: Boolean, whether the grain is tumbling.
 
     Returns:
     - A dictionary with Fp and Gp arrays. Shape: [Nomega, Nmu]
     """
-    mu_ip_2 = np.array(mu_ip)**2
-    mu_op_2 = np.array(mu_op)**2
-    temp, xh, xC = env['T'], env['xh'], env['xC']
-    Gp_op = 2/3 * Gp_per_mu2_averaged(temp, xh, xC, a, beta, fZ, 2 * omega_vec, a2=a2) # shape: [Nomegas]
-    Nomegas = np.size(omega_vec)
+    omega = np.atleast_1d(omega_vec)
+    mu_ip_2 = np.asarray(mu_ip).reshape(-1)**2
+    mu_op_2 = np.asarray(mu_op).reshape(-1)**2
 
-    if beta == 0: # Spherical grain
-        tumbling = False
+    def per_mu2(frequencies):
+        return Gp_per_mu2_averaged(env['T'], env['xh'], env['xC'], a, beta,
+                                   fZ, frequencies, a2=a2)
 
-    if tumbling:
-        # Disklike tumbling grain 
-        ## Corr: omega could be a vector
-        def Gp_Fp_vals(omega_ind):
-            omega = omega_vec[omega_ind]
-            cos_theta_list = maketab(-1, 1, 21)
-            Omega_arr = np.absolute(omega  * (1 - beta * cos_theta_list) / (1+beta) )
-            weight_Gp = (1 - cos_theta_list)**2 / 4
-            weight_Fp = - weight_Gp * cos_theta_list
-            aux_result = Gp_per_mu2_averaged(temp, xh, xC, a, beta, fZ, Omega_arr, a2=a2) 
-            result_Gp = 2*np.average(aux_result*weight_Gp) *  mu_ip_2 + Gp_op[omega_ind] * mu_op_2 
-            result_Fp = result_Gp/(1+beta) + (beta/(1+beta)) * 2*np.average(aux_result*weight_Fp) *  mu_ip_2 
-            return result_Gp, result_Fp
-        
-        Gp, Fp = [], []
+    if not tumbling and beta > 0:
+        # At theta=pi/2, axial dipoles rotate at L/Iref. Half of the
+        # equatorial dipole power lies transverse to L after azimuth averaging.
+        Gp = per_mu2(omega / (1 + beta))[:, None] * (mu_op_2 + 0.5 * mu_ip_2)
+        return {'Fp': Gp / (1 + beta), 'Gp': Gp}
+    if beta == 0 or not tumbling:
+        Gp = per_mu2(omega)[:, None] * mu_ip_2
+        return {'Fp': Gp, 'Gp': Gp}
 
-        for ind in np.arange(Nomegas):
-            Gp_vals, Fp_vals = Gp_Fp_vals(ind)
-            Gp.append(Gp_vals)
-            Fp.append(Fp_vals)
+    # Eqs. (43) and (46): omega is L/I3 and omega/(1+beta) is L/Iref.
+    ref_omega = omega / (1 + beta)
+    Gp_op = (2/3) * per_mu2(ref_omega)
+    cos_theta = maketab(-1, 1, 21)
+    weight_g = (1 - cos_theta)**2 / 4
+    weight_f = -cos_theta * weight_g
+    Gp = np.empty((omega.size, mu_ip_2.size))
+    Fp = np.empty_like(Gp)
 
-        Gp = np.array(Gp).reshape(Nomegas, -1)
-        Fp = np.array(Fp).reshape(Nomegas, -1)
-       
-        return {'Fp': Fp, 'Gp': Gp}
-
-    # Standard spherical grain with K = J
-    Gp = Gp_per_mu2_averaged(temp, xh, xC, a, beta, fZ, omega_vec, a2=a2)
-    Gp = np.matmul(Gp.reshape(-1,1), mu_ip_2.reshape(1,-1))
-    Fp = Gp
+    # Bound the (charge, frequency, angle) interpolation work array per grain.
+    block_size = 32
+    for start in range(0, omega.size, block_size):
+        block = slice(start, start + block_size)
+        mapped = ref_omega[block, None] * np.abs(1 - beta * cos_theta)
+        drag = per_mu2(mapped.ravel()).reshape(mapped.shape)
+        g_ip = 2 * np.mean(drag * weight_g, axis=1)
+        f_cross = 2 * np.mean(drag * weight_f, axis=1)
+        Gp[block] = g_ip[:, None] * mu_ip_2 + Gp_op[block, None] * mu_op_2
+        Fp[block] = (Gp[block] + beta * f_cross[:, None] * mu_ip_2) / (1 + beta)
 
     return {'Fp': Fp, 'Gp': Gp}
 
-
+# A wildcard import explicitly requests the historic small-e table attributes.
+__all__ = [name for name in globals() if not name.startswith('_')] + [
+    'Gamma_tab', 'smalle_tab', 'Gamma_max', 'smalletabs',
+]

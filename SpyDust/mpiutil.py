@@ -1,5 +1,6 @@
 """
-This module is adapted from https://github.com/radiocosmology/caput/blob/master/caput/mpiutil.py
+This module adapts the MPI utilities from caput, distributed under GPL version 2.
+See LICENSE.caput and https://github.com/radiocosmology/caput.
 """
 import numpy as np
 import logging
@@ -54,14 +55,23 @@ def partition_list(full_list, i, n, method="con"):
         raise ValueError("Unknown partition method %s" % method)
 
 def partition_list_mpi(full_list, method="con", comm=_comm):
-    """
-    Return the partition of a list specific to the current MPI process.
-    """
-    if comm is not None:
-        rank = comm.rank
-        size = comm.size
+    """Partition collectively, using a single permutation for random assignment."""
+    if comm is None:
+        return partition_list(full_list, 0, 1, method=method)
+    if method == "rand":
+        order = np.random.permutation(len(full_list)) if comm.rank == 0 else None
+        order = comm.bcast(order, root=0)
+        indices = partition_list(order, comm.rank, comm.size)
+        return [full_list[i] for i in indices]
+    return partition_list(full_list, comm.rank, comm.size, method=method)
 
-    return partition_list(full_list, rank, size, method=method)
+def _check_rank_errors(comm, error, operation, item=None):
+    location = f"rank {comm.rank}" if item is None else f"rank {comm.rank}, item {item}"
+    message = None if error is None else f"{location}: {type(error).__name__}: {error}"
+    for failure in comm.allgather(message):
+        if failure is not None:
+            raise RuntimeError(f"MPI {operation} failed on {failure}") from error
+
 
 def parallel_map(func, glist, root=None, method="con", comm=_comm):
     """
@@ -99,10 +109,18 @@ def parallel_map(func, glist, root=None, method="con", comm=_comm):
     # Partition list based on MPI rank
     llist = partition_list_mpi(zlist, method=method, comm=comm)
 
-    # Operate on sublist
-    flist = [(ind, func(item)) for ind, item in llist]
-
-    barrier(comm=comm)
+    # Every rank must reach the same collective even if a local item fails.
+    flist = []
+    local_error = None
+    failed_index = None
+    for ind, item in llist:
+        try:
+            flist.append((ind, func(item)))
+        except Exception as exc:
+            local_error = exc
+            failed_index = ind
+            break
+    _check_rank_errors(comm, local_error, "parallel_map", failed_index)
 
     rlist = None
     if root is None:
@@ -150,7 +168,8 @@ def parallel_map_joblib(func, glist, n_jobs=-1, backend='loky'):
     results : list
         List of results in the same order as input.
     """
-    # Use joblib to parallelize the function calls
+    from joblib import Parallel, delayed
+
     results = Parallel(n_jobs=n_jobs, backend=backend)(
         delayed(func)(item) for item in glist
     )
@@ -159,28 +178,11 @@ def parallel_map_joblib(func, glist, n_jobs=-1, backend='loky'):
 
 
 def parallel_jobs_no_gather_no_return(func, glist, method="con", comm=_comm):
-    """
-    Apply a parallel map using MPI.
-    Should be called collectively on the same list. All ranks return the full
-    set of results.
-    Parameters
-    ----------
-    func : function
-        Function to apply.
-    glist : zipped list
-        List of map over. Must be globally defined.
-    root : None or Integer
-        Which process should gather the results, all processes will gather the results if None.
-    method: str
-        How to split `glist` to each process, can be 'con': continuously, 'alt': alternatively, 'rand': randomly. Default is 'con'.
-    comm : MPI communicator
-        MPI communicator that array is distributed over. Default is the gobal _comm.
-    Returns
-    -------
-    results : list
-        Global list of results.
-    """
+    """Execute distributed jobs for side effects without gathering their results.
 
+    In a single process this legacy interface returns the local results.
+    On multiple ranks each job receives zip(*item) and returns are discarded.
+    """
     # Synchronize
     barrier(comm=comm)
 
@@ -193,11 +195,13 @@ def parallel_jobs_no_gather_no_return(func, glist, method="con", comm=_comm):
     llist = partition_list_mpi(glist, method=method, comm=comm)
 
     # Operate on sublist
-    for zipped_item in llist:
-        func(zip(*zipped_item))
-
-    # Synchronize
-    barrier(comm=comm)
+    local_error = None
+    try:
+        for zipped_item in llist:
+            func(zip(*zipped_item))
+    except Exception as exc:
+        local_error = exc
+    _check_rank_errors(comm, local_error, "parallel_jobs_no_gather_no_return")
     return None
 
 def barrier(comm=_comm):

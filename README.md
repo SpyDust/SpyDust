@@ -1,115 +1,63 @@
 # SpyDust
 
-[**SpyDust**](https://arxiv.org/abs/2412.03431) is an advanced Python package for modeling spinning dust radiation in astrophysical environments. Building upon previous models (the IDL [**SPDUST**](https://arxiv.org/pdf/1003.4732)), SpyDust offers enhanced capabilities and corrections, making it a valuable tool for researchers in astrophysics and related fields.
-
-For a detailed understanding of the underlying models and theoretical background, refer to the publication: [SpyDust: an improved and extended implementation for modeling spinning dust radiation](https://arxiv.org/abs/2412.03431).
-
----
-
-## Features
-
-- **Comprehensive Grain Shape Modeling**: Considers a wide range of grain geometries, providing corresponding grain dynamics, directional radiation fields, and angular momentum transports.
-
-- **Updated Physical Processes**: Incorporates corrections and extensions, including updated expressions for the effects of electrical dipole radiation back-reaction and plasma drag on angular momentum dissipation.
-
-- **Parallisation**: Functions can be run in parallel (implemented by mpi4py) by simply setting the corresponding keyword to True.
-
-- **SPDUST as is** mode: Provides a submodule, **SPDUST_as_is**, which is exactly the full equivalent of the IDL spdust. Just in case the user wants to stick with the spdust simulation.
-
-- **Example notebooks**: Provide some Jupyter notebooks to help users get started with this package.
-
----
-
-## Requirements
-
-SpyDust requires Python 3.7 or higher (up to Python 3.9) and the following dependencies:
-
-**Required**:
-- `numpy`
-- `scipy`
-- `mpi4py`
-
-**Optional**:
-- `pandas`: This is not needed for spinning dust spectra, but if free free emission is also desired (using free_free.py), then it is needed.
-
----
+SpyDust models the microwave emission from rotating dust grains. Given gas conditions, a radiation field and a grain population, it calculates charge and rotation distributions and sums the emission from each grain size and shape. The package also includes tools for spectral fitting, moment expansion and Stokes spectra. [SpyDust paper](https://arxiv.org/abs/2412.03431)
 
 ## Installation
 
-You can install SpyDust using pip:
+Install an MPI runtime (Open MPI or MPICH), then install SpyDust in the Python environment used by your terminal or Jupyter kernel.
 
 ```bash
-pip install SpyDust --no-deps
+python -m pip install SpyDust
 ```
 
-Otherwise, you can directly `git clone' this repo and set up the environment by yourself.
+SpyDust requires NumPy, SciPy and mpi4py and includes the model's lookup tables. Use `python -m pip install 'SpyDust[plot]'` for plotting. To run the research notebooks, clone the repository, check out `v1.4.0`, and run `python -m pip install -e '.[notebooks]'` from its root.
 
----
+## Calculate a spectrum
 
-# Usage
+This example uses cold neutral medium (CNM) conditions and the fixed-shape model. It can be saved as `cnm.py` and run with `python cnm.py`.
 
-Import the package in your project and explore its functionalities for modeling spinning dust radiation. Data files required for computations are bundled with the package.
-
----
-
-## Example usage:
-
-Here is an example of using the `SpyDust.SpyDust' function to generate a spectrum for a sample CNM environment:
 ```python
 from SpyDust.SpyDust import SpyDust
 
-# Define the environment:
-# 'nH': total hydrogen number density (cm3),
-# 'T': gas temperature (K),
-# 'chi': intensity of the radiation field relative to the average interstellar radiation field,
-# 'xh': hydrogen ionization fraction,
-# 'xC': ionized carbon fractional abundance,
-# 'y': molecular hydrogen fractional abundance,
-# 'gamma': H2 formation efficiency,
-# 'dipole': rms dipole moment for dust grains.
-CNM_params = {'nh' : 30, 'T': 100., 'Chi': 1, 'xh': 1.2e-3, 'xC': 3e-4, 'y' : 0, 'gamma': 0, 'dipole': 9.3, 'line':7}
+CNM_params = {
+    "nh": 30.0,       # Total hydrogen number density, cm^-3
+    "T": 100.0,       # Gas temperature, K
+    "Chi": 1.0,       # Intensity relative to the reference interstellar radiation field
+    "xh": 1.2e-3,     # Hydrogen ion fraction
+    "xC": 3e-4,       # Ionized carbon abundance per H nucleus
+    "y": 0.0,         # Molecular hydrogen fraction
+    "gamma": 0.0,     # H2 formation efficiency
+    "dipole": 9.3,    # Intrinsic RMS dipole moment at grain radius 10^-7 cm, in debye
+    "line": 7,        # One-based row of Weingartner & Draine (2001a), Table 1
+}
 
-
-# Generate the spectrum
-spectrum = SpyDust(params, min_freq=1, max_freq=400, n_freq=200, single_beta=True)
-
-# Plot the spectrum
-import matplotlib.pyplot as plt
-plt.loglog(spectrum[0,:], spectrum[1,:])
-plt.xlabel('Frequency (GHz)')
-plt.ylabel('Emissivity')
-plt.show()
+frequency_GHz, mode_spectrum = SpyDust(
+    CNM_params, min_freq=1, max_freq=400, n_freq=200, single_beta=True
+)
+emissivity = mode_spectrum / 4  # Jy sr^-1 cm^2 per H nucleus
 ```
 
-Instead of using the SpyDust rotation distribution method described in the paper, you can generate spectra using your own arbitrary distributions of configuration parameters as inputs to the `SpyDust.SED' function.
+The first row gives logarithmic frequency-bin centres in GHz. The second row retains the historical SpyDust radiation-mode normalization. Divide it by four to obtain emissivity per Hz per steradian, in Jy sr⁻¹ cm² H⁻¹. For a transverse rotating dipole the Larmor power is 2μ²ω⁴/(3c³). Averaging over solid angle and changing frequency from ω to ν gives μ²ω⁴/(3c³) times the rotation probability density, one quarter of the coefficient in the SpyDust mode sum. The legacy `SPDUST` entry point already uses the conventional emissivity normalization. To save the two returned rows as columns in the historical convention, pass `output_file="cnm.txt"`. With MPI, run the same script on every rank, for example `mpiexec -n 2 python cnm.py`. Every rank receives the spectrum and rank zero writes the requested file.
 
---- 
+`single_beta=True` uses one shape per radius, with the specified disk thickness below the size transition and spherical grains above it. The default `single_beta=False` averages over the conditional shape distribution at each radius. Its default is `Nbeta=101`. Set `Nbeta` to check convergence for your environment and frequency range. `spdust_plasma=True` selects the legacy plasma prescription within the modern model. To reproduce the original SPDUST model, use `from SpyDust.SPDUST_as_is.spdust import SPDUST`. [Original SPDUST documentation](https://cosmo.nyu.edu/yacine/spdust/spdust.html)
+
+## Validation and examples
+
+Install pytest in the development environment, then run `python -m pytest tests`. The compatibility tests compare the legacy spectra in seven ISM environments with archived IDL results. The modern model has separate checks for grain shapes, angular emission, plasma drag and photoelectric excitation. The research notebooks illustrate the wider analysis. Their stored plots are historical. Run them in a scratch copy to regenerate the figures with the current model. [IDL comparison](https://github.com/SpyDust/SpyDust/blob/v1.4.0/paper-products/spydust_paper/spdust_IDLvsPython.ipynb) · [Grain-shape comparison](https://github.com/SpyDust/SpyDust/blob/v1.4.0/paper-products/spydust_paper/SpDust_vs_SpyDust.ipynb) · [Stokes example](https://github.com/SpyDust/SpyDust/blob/v1.4.0/paper-products/full_stokes/test_funcs.ipynb)
+
+To supply your own rotation or orientation distribution, use `SpyDust.SED.SED` or `SpyDust.full_Stokes.full_Stokes_SED`. Spectral fits and moment expansions are available in `SpyDust.SED_fit` and `SpyDust.mom_exp`.
+
+## Changes in 1.4.0
+
+The modern model now resolves the conditional shape distribution, evaluates the shape-dependent plasma frequency and scales photoelectric excitation with the radiation field. Rotation densities are normalized on a physical spin grid independently of the observing band. The rotational solver uses the largest principal inertia and returns the density in Ω = L/Iref for both oblate and prolate grains. These changes can alter spectra and radiation-field derivatives relative to the 1.3.2 release. For emission, the population model uses empirical internal alignment, including alignment for nearly spherical grains. Its rotational damping and excitation use the selected tumbling setting. For isotropic internal orientations, integration over the tabulated spin frequencies resolves narrow rotation features and the low-frequency tail of the fourth mode.
+
+The v2 lognormal fit retains its return tuple and reports the physical peak. Its redundant power-law exponent is fixed to zero. The moment-expansion cache tracks the physical settings used to construct each basis. [SpyDust equations](https://arxiv.org/html/2412.03431v2)
 
 ## History
 
-- **Version 1.3**: Added new modules to SpyDust, including "mom_exp.py", "SED_fit.py", "full_Stokes.py", and notebooks and products for the spectral feature paper 
+- Version 1.3 added spectral fitting, moment expansion, full Stokes and the spectral-feature notebooks.
+- Version 1.2 fixed example notebook imports.
+- Version 1.1 removed the Numba dependency and fixed installation issues.
+- Version 1.0 introduced the Python implementation, extended grain shapes and degeneracy analysis.
 
-- **Version 1.2**: Fixed import bugs in the example notebooks.  
-
-- **Version 1.1**: Numba dependency removed and installation issues fixed. 
-
-- **Version 1.0**: Initial release of SpyDust, introducing comprehensive grain shape modeling, updated physical processes, and degeneracy analysis tools.
-
-
-
-
-## TODO (Future Versions)
-- Future upgrades will include features such as the SED fitting tool (based on perturbation statistics tools like moment expansion) and improve the treatment of the grain rotation distribution.
-
----
-
-## Resources
-
-- **Author**: Zheng Zhang
-- **License**: This project is licensed under the MIT License - see the LICENSE file for details.
-- **Collaboration**: [SpyDust GitHub Collaboration](https://github.com/SpyDust/SpyDust)
-- **Spdust Documentation**: We refer users to the website of [spdust](https://cosmo.nyu.edu/yacine/spdust/spdust.html) for better documentation of environmental parameters 
-
----
-
-
+SpyDust's original code is released under the MIT license. Its MPI utilities include code adapted from caput under GPL version 2. [MIT license](https://github.com/SpyDust/SpyDust/blob/v1.4.0/LICENSE) · [caput license](https://github.com/SpyDust/SpyDust/blob/v1.4.0/LICENSE.caput) · [Project repository](https://github.com/SpyDust/SpyDust)

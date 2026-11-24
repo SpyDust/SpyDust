@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "SpyDust"
-version = "1.3.2"
+dynamic = ["version"]
 description = "A code for modeling spinning dust radiation"
 readme = "README.md"
 requires-python = ">=3.7"
@@ -15,6 +15,7 @@ keywords = ["astrophysics", "astronomy"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: GNU General Public License v2 (GPLv2)",
     "Programming Language :: Python :: 3",
 ]
 dependencies = [
@@ -23,8 +24,18 @@ dependencies = [
     "mpi4py",
 ]
 
+[project.optional-dependencies]
+plot = ["matplotlib"]
+notebooks = ["jupyter", "matplotlib", "pandas", "scikit-learn", "seaborn"]
+
 [project.urls]
-Homepage = "https://github.com/zzhang0123/SpyDust"
+Homepage = "https://github.com/SpyDust/SpyDust"
+
+[tool.setuptools]
+zip-safe = false
+
+[tool.setuptools.dynamic]
+version = {attr = "SpyDust.__version__"}
 
 [tool.setuptools.packages.find]
 include = ["SpyDust*"]

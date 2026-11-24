@@ -1,6 +1,7 @@
 # Include essential files
 include README.md
 include LICENSE
+include LICENSE.caput
 include pyproject.toml
 include setup.py
 
@@ -10,6 +11,8 @@ recursive-include SpyDust/Data_Files *
 
 # Explicitly exclude paper-products (formerly tests) and other unnecessary files
 prune paper-products
+recursive-include paper-products/spydust_paper/IDL_outputs *_emiss.out
+recursive-include tests test_*.py
 prune *.egg-info
 prune __pycache__
 prune .git

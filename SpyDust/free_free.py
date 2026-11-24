@@ -1,9 +1,7 @@
 from . import SpDust_data_dir
 from .util import cgsconst
-from .mpiutil import rank0
 
 import numpy as np
-import pandas as pd
 
 pi = np.pi
 c = cgsconst.c
@@ -20,33 +18,15 @@ class gff_data:
     u_tab = None 
     gff_tab = None
 
+
 def read_gaunt_factor():
+    """Load Sutherland's table, ordered by temperature and then frequency."""
+    table = np.genfromtxt(SpDust_data_dir + "gff.dat", comments=";", skip_footer=1).reshape(41, 81, 3)
+    gff_data.gamma2_tab = table[:, 0, 0]
+    gff_data.u_tab = table[0, :, 1]
+    gff_data.gff_tab = table[:, :, 2]
 
-    # Load the data using pandas
-    gff_data_file = SpDust_data_dir + 'gff.dat'
-    data = pd.read_csv(gff_data_file, sep=r'\s+', comment=';', header=None, names=['gamma2', 'u', 'gff'])
 
-    # Define dimensions
-    Ngamma2 = 41
-    Nu = 81
-
-    # Initialize arrays
-    gff_data.gamma2_tab = np.zeros(Ngamma2)
-    gff_data.u_tab = np.zeros(Nu)
-    gff_data.gff_tab = np.zeros((Ngamma2, Nu))
-
-    # Assign values to gamma2_tab and u_tab
-    gff_data.gamma2_tab = data['gamma2'].values[Nu * np.arange(Ngamma2)].astype(float)
-    gff_data.u_tab = data['u'].values[0:Nu].astype(float)
-
-    # Fill the gff_tab array
-    for i in range(Ngamma2):
-        gff_data.gff_tab[i, :] = data['gff'].values[i * Nu + np.arange(Nu)].astype(float)
-    
-    if rank0:
-        print('Gaunt factor stored')
-
-# Call the function to test it
 read_gaunt_factor()
 
 def gaunt_factor(gamma2, u):

@@ -4,7 +4,8 @@ from .Grain import grainparams, rms_dipole
 from .charge_dist import charge_dist
 from .AngMomDist import log_f_rot
 import numpy as np
-from scipy.interpolate import interp1d
+from .full_Stokes import _TabulatedRotationPDF, mode2and3, mode4
+from .util import homogeneous_dist
 
 
 pi = np.pi
@@ -19,105 +20,61 @@ mp = cgsconst.mp
 a2_default = grainparams.a2
 
 
-def mu2_f_cond(env, a, beta, fZ, mu_rms, ip, Ndipole, tumbling=True, omega_min=1e7, omega_max=1e12, Nomega=1000, spdust_plasma=False, a2=a2_default):
-    """
-    Returns a [3, Nomega] array:
-    [omega, <mu_ip^2 fa(omega)>, <mu_op^2 fa(omega)>].
-    
-    Parameters:
-    - env: Environment parameters (such as temperature).
-    - a: Grain size.
-    - beta: Grain shape parameter.
-    - fZ: Distribution of grain charges.
-    - mu_rms: Root mean square dipole moment.
-    - ip: Fraction of in-plane dipole moment.
-    - Ndipole: Number of dipole values used in averaging.
-    - tumbling: Boolean to indicate whether the grains are tumbling disklike grains.
-    Returns:
-    - A numpy array [2, Nomega] containing omega, <mu_ip^2 fa(omega)>, and <mu_op^2 fa(omega)>.
-    """
-    op = 1.0 - ip  # Out-of-plane dipole moment fraction
+def _check_dipole_sampling(ip, Ndipole):
+    if not isinstance(Ndipole, (int, np.integer)) or Ndipole < 1:
+        raise ValueError("Ndipole must be a positive integer.")
+    if not 0. <= ip <= 1.:
+        raise ValueError("inplane must be in [0, 1].")
 
-    if Ndipole == 1:  # Not averaging over dipoles
-        mu_ip = np.array([np.sqrt(ip) * mu_rms]) # shape (1,)
-        mu_op = np.array([np.sqrt(op) * mu_rms]) # shape (1,)
-        log_f_a = log_f_rot(env, a, beta, fZ, mu_ip, mu_op, 
-                           tumbling=tumbling, 
-                           omega_min=omega_min, omega_max=omega_max, Nomega=Nomega, use_spdust_plasma=spdust_plasma, a2=a2)
-        f_a = np.exp(log_f_a)
-        mu_ip2_fa = f_a * mu_ip[0]**2
-        mu_op2_fa = f_a * mu_op[0]**2
+
+def mu2_f_cond(env, a, beta, fZ, mu_rms, ip, Ndipole, tumbling=True, omega_min=1e7, omega_max=1e12, Nomega=1000, spdust_plasma=False, a2=a2_default):
+    """Dipole averages [<mu_ip² f>, <mu_op² f>] on the rotation grid."""
+    _check_dipole_sampling(ip, Ndipole)
+
+    if Ndipole == 1:
+        mu_ip = np.array([np.sqrt(ip) * mu_rms])
+        mu_op = np.array([np.sqrt(1. - ip) * mu_rms])
+        weights = np.ones(1)
     else:
-        # Set up for averaging
-        xmin = 5e-3
-        xmed = 0.5
-        xmax = 5.0
-        aux_Nd = int(Ndipole/2)
-        x_tab = np.concatenate((makelogtab(xmin, xmed, aux_Nd), 
-                                maketab(xmed, xmax, aux_Nd)))
-        Dx_tab = np.concatenate((DX_over_X(xmin, xmed, aux_Nd) * makelogtab(xmin, xmed, aux_Nd), 
-                                 (xmax - xmed)/aux_Nd + np.zeros(aux_Nd)))
-        if a < a2:  # Disk-like grains, need 2D Gaussian
-            mu_ip = np.sqrt(ip) * mu_rms * np.outer(x_tab, np.ones(Ndipole))
-            mu_op = np.sqrt(op) * mu_rms * np.outer(np.ones(Ndipole), x_tab)
-            Dmu_ip = np.outer(Dx_tab, np.ones(Ndipole))
-            Dmu_op = Dmu_ip.T
-            # Probability calculation for dipoles
-            if ip == 0.0:
-                Proba = np.exp(-0.5 * mu_op**2 / mu_rms**2) * Dmu_op
-            elif op == 0.0:
-                Proba = mu_ip / mu_rms * np.exp(-mu_ip**2 / mu_rms**2) * Dmu_ip
-            else:
-                Proba = mu_ip / mu_rms * np.exp(-mu_ip**2 / (ip * mu_rms**2)) * \
-                         np.exp(-0.5 * mu_op**2 / (op * mu_rms**2)) * Dmu_ip * Dmu_op
-            Proba = Proba / np.sum(Proba)
-            # Flatten 2D arrays to 1D
-            mu_ip = mu_ip.flatten()
-            mu_op = mu_op.flatten()
-            Proba = Proba.flatten()
-            log_f_a = log_f_rot(env, a, beta, fZ, mu_ip, mu_op, 
-                               tumbling=tumbling,  
-                               omega_min=omega_min, 
-                               omega_max=omega_max, 
-                               Nomega=Nomega,
-                               use_spdust_plasma=spdust_plasma, a2=a2)
-            f_a = np.exp(log_f_a)
-            Proba = np.outer(Proba, np.ones(Nomega))
-            mu_ip = np.outer(mu_ip, np.ones(Nomega)) # shape (Ndipole, Nomega)
-            mu_op = np.outer(mu_op, np.ones(Nomega))
-            # Calculate <mu_ip^2 fa(omega)> and <mu_op^2 fa(omega)>
-            mu_ip2_fa = np.sum(mu_ip**2  * Proba * f_a, axis=0) # sum over Ndipole
-            mu_op2_fa = np.sum(mu_op**2  * Proba * f_a, axis=0)
-            #mu_ip2_fa = np.sum((mu_ip**2 / mu_rms**2) * Proba * f_a, axis=0) # sum over Ndipole
-            #mu_op2_fa = np.sum((mu_op**2 / mu_rms**2) * Proba * f_a, axis=0)
-            #if ip != 0.0 and op != 0.0:
-            #    mu_ip2_fa /= ip
-            #    mu_op2_fa /= op
-        else:  # Spherical grains, average over grain orientation first
-            Proba = x_tab**2 * np.exp(-1.5 * x_tab**2) * Dx_tab
-            Proba = Proba / np.sum(Proba)
-            log_f_a = log_f_rot(env, a, beta, fZ, np.sqrt(2/3) * mu_rms * x_tab, mu_rms / np.sqrt(3) * x_tab, 
-                               tumbling=tumbling,  omega_min=omega_min, omega_max=omega_max, Nomega=Nomega, use_spdust_plasma=spdust_plasma, a2=a2)
-            f_a = np.exp(log_f_a)
-            Proba = np.outer(Proba, np.ones(Nomega))
-            x_tab = np.outer(x_tab, np.ones(Nomega))
-            mu2_fa_aux = np.sum(x_tab**2 * Proba * f_a, axis=0)
-            mu_ip2_fa = mu2_fa_aux * mu_rms**2 * 2/3
-            mu_op2_fa = mu2_fa_aux * mu_rms**2 * 1/3
-    # Prepare the result as a [3, Nomega] array
-    result = np.zeros((2, Nomega))
-    
-    result[0, :] = mu_ip2_fa
-    result[1, :] = mu_op2_fa
-    # Save the intermediate results (optional)
-    # print('Saving results...')
-    # np.savez(f'{ia}_mu_fa.npz', omega=omega, mu_ip2_fa=mu_ip2_fa, mu_op2_fa=mu_op2_fa, mu_rms=mu_rms, ip=ip)
-    return result
+        # Half the bins sample the low-moment tail on a logarithmic grid.
+        xmin, xmed, xmax = 0.005, 0.5, 5.
+        n_log = Ndipole // 2
+        n_linear = Ndipole - n_log
+        low = makelogtab(xmin, xmed, n_log)
+        x = np.concatenate([low, maketab(xmed, xmax, n_linear)])
+        dx = np.concatenate([DX_over_X(xmin, xmed, n_log) * low,
+                             np.full(n_linear, (xmax - xmed) / n_linear)])
+
+        if a >= a2:
+            # The large-grain model first averages over dipole direction.
+            mu_ip = np.sqrt(2./3.) * mu_rms * x
+            mu_op = np.sqrt(1./3.) * mu_rms * x
+            weights = x**2 * np.exp(-1.5*x**2) * dx
+        else:
+            # Independent Rayleigh (in-plane) and half-normal (axial) moments.
+            # At either endpoint the absent component is a delta mass at zero.
+            x_ip = x if ip > 0. else np.zeros(1)
+            x_op = x if ip < 1. else np.zeros(1)
+            w_ip = x * np.exp(-x**2) * dx if ip > 0. else np.ones(1)
+            w_op = np.exp(-0.5*x**2) * dx if ip < 1. else np.ones(1)
+            mu_ip = np.sqrt(ip) * mu_rms * np.repeat(x_ip, len(x_op))
+            mu_op = np.sqrt(1. - ip) * mu_rms * np.tile(x_op, len(x_ip))
+            weights = np.outer(w_ip, w_op).ravel()
+        weights /= weights.sum()
+
+    log_f = log_f_rot(env, a, beta, fZ, mu_ip, mu_op, tumbling=tumbling,
+                      omega_min=omega_min, omega_max=omega_max, Nomega=Nomega,
+                      use_spdust_plasma=spdust_plasma, a2=a2)
+    f = np.exp(log_f)
+    return np.array([np.sum((weights * moment**2)[:, None] * f, axis=0)
+                     for moment in (mu_ip, mu_op)])
+
 
 def mu2_f(env, a_tab, beta_tab, f_a_beta, mole_dipole, ip, Ndipole, tumbling=True, parallel=True, contract_a=True, omega_min=1e7, omega_max=1e15, Nomega=1000, spdust_plasma=False, a2=a2_default):
     '''
     Calculate mu^2 f(omega, a, beta, mu) and marginalize over "mu" and "a" (if contract_a is True).
     '''
+    _check_dipole_sampling(ip, Ndipole)
     num_a = np.size(a_tab)
     num_beta = np.size(beta_tab)
     
@@ -152,135 +109,109 @@ def mu2_f(env, a_tab, beta_tab, f_a_beta, mole_dipole, ip, Ndipole, tumbling=Tru
     else:
         return result # shape (Na, Nbeta, 2, Nomega)
     
-def SED(nu_tab, mu2_f_arr, beta_tab, angular_Omega_tab, cos_theta_list, cos_theta_weights):
-    '''
-    Calculate the SED for an ensemble of spinning dust grains.
-    Parameters:
-    - nu_tab: array of frequencies in Hz.
-    - mu2_f_arr: array of shape (Nbeta, 2, Nomega), 
-                where (:, 0, :) and (:, 1, :) are mu2_f_ip and mu2_f_op, respectively:
-                    - mu2_f_ip := mu_perp^2 f(omega, a, beta, mu) marginalized over grain sizes (a) and dipole moments (mu) distributions
-                    - mu2_f_op := mu_parallel^2 f(omega, a, beta, mu) marginalized over grain sizes (a) and dipole moments (mu) distributions
-    - beta_tab: array of grain shape parameters, shape (Nbeta,)
-    - angular_Omega_tab: array of rescaled angular momentum, shape (Nomega,). 
-                This corresponds to the last axis of mu2_f_arr.
-    - cos_theta_list: array of cos(theta) values for averaging over nutation angle, shape (N_cos_theta,)
-    - cos_theta_weights: array of weights for averaging over nutation angle, shape (Nbeta, N_cos_theta)
-                Note the shape: we allow for different weights for each beta value.
-    '''
-    mu2_f_ip = mu2_f_arr[:, 0, :]
-    mu2_f_op = mu2_f_arr[:, 1, :]
-    n_cos_theta = np.size(cos_theta_list)
-    log_angular_Omega = np.log(angular_Omega_tab)
-    omega_tab = nu_tab * 2 * pi
-    omega_tab_4 = omega_tab**4 / c**3
-    N_freqs = np.size(omega_tab)
-    
-    def emiss_beta(beta_ind):
-        beta = beta_tab[beta_ind]
-        aux_ip = mu2_f_ip[beta_ind, :]
-        mask_ip = aux_ip > 1e-300
-        aux_ip = aux_ip[mask_ip]
-        log_angular_Omega_ip = log_angular_Omega[mask_ip]
-        interp_ip = interp1d( log_angular_Omega_ip , np.log(aux_ip), kind='cubic', fill_value=-300.0, bounds_error=False)
-        aux_op = mu2_f_op[beta_ind, :]
-        mask_op = aux_op > 0
-        aux_op = aux_op[mask_op]
-        log_angular_Omega_op = log_angular_Omega[mask_op]
-        interp_op = interp1d( log_angular_Omega_op , np.log(aux_op), kind='cubic', fill_value=-300.0, bounds_error=False)
-        emiss_mode_1 = 8/9 *  np.exp(interp_op(np.log(omega_tab)))  * omega_tab_4
-        if beta == 0: 
-            aux = 8/9 *  np.exp(interp_ip(np.log(omega_tab)))  * omega_tab_4 
-            return aux + emiss_mode_1
-        aux = np.zeros((n_cos_theta, N_freqs))
-        for theta_ind in range(n_cos_theta):
-            cos_theta = cos_theta_list[theta_ind]
-            log_omega_tab_mode2 = np.log(omega_tab/np.abs(1+beta*cos_theta))
-            log_omega_tab_mode3 = np.log(omega_tab/np.abs(1-beta*cos_theta))
-            part2= 1/3 *  np.exp(interp_ip(log_omega_tab_mode2))  * (1+cos_theta)**2 / np.abs(1+beta*cos_theta)
-            part3= 1/3 *  np.exp(interp_ip(log_omega_tab_mode3))  * (1-cos_theta)**2 / np.abs(1-beta*cos_theta)
-            if cos_theta == 0:
-                aux[theta_ind, :] = (part2 + part3) * omega_tab_4
-                continue
-            log_omega_tab_mode4 = np.log(omega_tab/np.abs(beta*cos_theta))
-            part4= 2/3 * np.exp(interp_ip(log_omega_tab_mode4)) * (1-cos_theta**2) / np.abs(beta*cos_theta)
-            aux[theta_ind, :] = (part2 + part3 + part4) * omega_tab_4
-        return np.average(aux, axis=0, weights=cos_theta_weights[beta_ind]) + emiss_mode_1 # shape (N_freqs,)
+def _rotation_pdf(log_rotation, values, cutoff):
+    """Construct the same finite-support log-log PCHIP density used by Stokes."""
+    if not np.isfinite(values).all() or np.any(values < 0.):
+        raise ValueError("Dipole-weighted rotation densities must be finite and nonnegative.")
+    active = values > cutoff
+    if not np.any(active):
+        return None
+    log_values = np.full(values.shape, -np.inf)
+    log_values[active] = np.log(values[active])
+    return _TabulatedRotationPDF(log_rotation, log_values, True, True)
 
-    result = parallel_map(emiss_beta, np.arange(len(beta_tab)))
-    result = np.array(result)
-    result = np.sum(result, axis=0) # shape (N_freqs,)
-    return result # shape (N_freqs,)
-    
 
-def SED_imp(nu_tab, mu2_f_arr, beta_tab, angular_Omega_tab, cos_theta_list, cos_theta_weights):
-    '''
-    Calculate the SED for an ensemble of spinning dust grains.
-    Parameters:
-    - nu_tab: array of frequencies in Hz.
-    - mu2_f_arr: array of shape (Nbeta, 2, Nomega), 
-                where (:, 0, :) and (:, 1, :) are mu2_f_ip and mu2_f_op, respectively:
-                    - mu2_f_ip := mu_perp^2 f(omega, a, beta, mu) marginalized over grain sizes (a) and dipole moments (mu) distributions
-                    - mu2_f_op := mu_parallel^2 f(omega, a, beta, mu) marginalized over grain sizes (a) and dipole moments (mu) distributions
-    - beta_tab: array of grain shape parameters, shape (Nbeta,)
-    - angular_Omega_tab: array of rescaled angular momentum, shape (Nomega,). 
-                This corresponds to the last axis of mu2_f_arr.
-    - cos_theta_list: array of cos(theta) values for averaging over nutation angle, shape (N_cos_theta,)
-    - cos_theta_weights: array of weights for averaging over nutation angle, shape (Nbeta, N_cos_theta)
-                Note the shape: we allow for different weights for each beta value.
-    '''
-    mu2_f_ip = mu2_f_arr[:, 0, :]
-    mu2_f_op = mu2_f_arr[:, 1, :]
-    n_cos_theta = np.size(cos_theta_list)
-    log_angular_Omega = np.log(angular_Omega_tab)
-    omega_tab = nu_tab * 2 * pi
-    log_omega_tab = np.log(omega_tab)
-    omega_tab_4 = omega_tab**4 / c**3
-    N_freqs = np.size(omega_tab)
-    
-    def emiss_beta(beta_ind):
-        beta = beta_tab[beta_ind]
+def SED(nu_tab, mu2_f_arr, beta_tab, angular_Omega_tab, cos_theta_list, cos_theta_weights,
+        *, isotropic=None):
+    """Sum the four radiation modes over shape and internal alignment.
 
-        aux_ip = mu2_f_ip[beta_ind, :]
-        mask_ip = aux_ip > 1e-300
-        
-        log_aux_ip = np.log(aux_ip[mask_ip]) 
+    Frequencies nu_tab are in Hz and angular_Omega_tab is in rad/s.
+    mu2_f_arr has shape (Nbeta, 2, Nomega) for the in-plane and axial
+    dipole powers. Each row of cos_theta_weights gives probability masses
+    on cos_theta_list for that beta, or None for equally weighted nodes.
+    Set isotropic[i] for continuous isotropic orientations. The continuous
+    integrals use rotation frequency to resolve narrow angular features.
+    """
+    cosines = np.asarray(cos_theta_list, dtype=float)
+    if cosines.ndim != 1 or not np.all(np.abs(cosines) <= 1.):
+        raise ValueError("cos_theta_list must contain direction cosines in [-1, 1].")
+    angular_Omega_tab = np.asarray(angular_Omega_tab, dtype=float)
+    if (angular_Omega_tab.ndim != 1 or not angular_Omega_tab.size or
+            not np.isfinite(angular_Omega_tab).all() or np.any(angular_Omega_tab <= 0.) or
+            np.any(np.diff(angular_Omega_tab) <= 0.)):
+        raise ValueError("Rotation frequencies must be positive, finite and increasing.")
+    log_rotation = np.log(angular_Omega_tab)
+    nu_tab = np.asarray(nu_tab, dtype=float)
+    omega = 2 * pi * np.atleast_1d(nu_tab)
+    if omega.ndim != 1 or np.any(omega < 0.) or not np.isfinite(omega).all():
+        raise ValueError("Observing frequencies must be finite and nonnegative.")
+    if isotropic is None:
+        isotropic = np.zeros(len(beta_tab), dtype=bool)
+    isotropic = np.asarray(isotropic, dtype=bool)
+    if isotropic.shape != (len(beta_tab),):
+        raise ValueError("Expected one isotropic alignment flag per beta.")
+    mu2_f_arr = np.asarray(mu2_f_arr)
+    positive_freq = omega > 0.
+    log_omega = np.log(omega[positive_freq])
 
-        interp_ip = interp1d( log_angular_Omega[mask_ip] , log_aux_ip, kind='cubic', fill_value=-300.0, bounds_error=False)
-        
-        aux_op = mu2_f_op[beta_ind, :]
-        mask_op = aux_op > 0
-        
-        log_aux_op = np.log(aux_op[mask_op])
-        interp_op = interp1d( log_angular_Omega[mask_op] , log_aux_op, kind='cubic', fill_value=-300.0, bounds_error=False)
-        emiss_mode_1 = 8/9 *  np.exp(interp_op(log_omega_tab))  * omega_tab_4
+    if len(cos_theta_weights) != len(beta_tab):
+        raise ValueError("Expected one alignment weight row per beta.")
+    orientations = []
+    for weights in cos_theta_weights:
+        weights = np.ones_like(cosines) if weights is None else np.asarray(weights, dtype=float)
+        if (weights.shape != cosines.shape or not np.all(np.isfinite(weights))
+                or np.any(weights < 0.) or not np.any(weights > 0.)):
+            raise ValueError("Alignment weights must be nonnegative with positive total mass.")
+        active = weights > 0.
+        orientations.append((cosines[active], weights[active] / weights[active].sum()))
 
-        if beta == 0: 
-            return  emiss_mode_1 + 8/9 *  np.exp(interp_ip(log_omega_tab))  * omega_tab_4
+    def emiss_beta(index):
+        beta = beta_tab[index]
+        x, w = orientations[index]
+        ip = _rotation_pdf(log_rotation, mu2_f_arr[index, 0], 1e-300)
+        op = _rotation_pdf(log_rotation, mu2_f_arr[index, 1], 0.)
+        emiss = np.zeros_like(log_omega)
+        if isotropic[index]:
+            frequencies = omega[positive_freq]
+            # <1-x²> = <(1+x)²>/2 = 2/3 for uniform x = cos(theta).
+            if op is not None:
+                emiss += (8./9.) * op(frequencies)
+            if ip is not None:
+                if beta == 0.:
+                    emiss += (8./9.) * ip(frequencies)
+                else:
+                    # Uniform orientation gives density 1/2 in x. The external
+                    # factors for the transverse and axial harmonics are 4/3 and 2/3.
+                    emiss += (2./3.) * ip.angle_integral(mode2and3, frequencies, beta, homogeneous_dist, 1)
+                    emiss += (1./3.) * ip.angle_integral(mode4, frequencies, beta, homogeneous_dist, 1)
+            return emiss
+        # Mode 1, after averaging over external orientations (paper Eq. 74).
+        if op is not None:
+            emiss += 4./3. * np.sum(w * (1. - x**2)) * op(omega[positive_freq])
+        if ip is not None:
+            # Modes 2--4. A zero mapping factor emits only at zero frequency.
+            # At beta=0 the two coincident transverse modes add at the same omega.
+            modes = ((1. + beta*x, (1. + x)**2 / 3.),
+                     (1. - beta*x, (1. - x)**2 / 3.),
+                     (beta*x, 2./3. * (1. - x**2)))
+            for mapping, power in modes:
+                factors = np.abs(mapping)
+                use = (factors > 0.) & (power > 0.)
+                if np.any(use):
+                    sampled = ip(omega[None, positive_freq] / factors[use, None])
+                    emiss += np.sum((w[use]*power[use]/factors[use])[:, None] * sampled, axis=0)
+        return emiss
 
-        aux = np.zeros((n_cos_theta, N_freqs))
+    shapes = parallel_map(emiss_beta, np.arange(len(beta_tab)))
+    spectrum = np.zeros_like(omega)
+    spectrum[positive_freq] = np.sum(shapes, axis=0) * omega[positive_freq]**4 / c**3
+    # The historical spherical shortcut returns a scalar. With nonspherical
+    # grains the angular average retains its length-one frequency axis.
+    return spectrum[0] if nu_tab.ndim == 0 and np.all(np.asarray(beta_tab) == 0.) else spectrum
 
-        beta_cos_theta = beta * cos_theta_list[:, np.newaxis]
-        one_plus_beta_cos = np.abs(1 + beta_cos_theta)
-        one_minus_beta_cos = np.abs(1 - beta_cos_theta)
-        
-        log_omega_mode2 = log_omega_tab - np.log(one_plus_beta_cos)
-        log_omega_mode3 = log_omega_tab - np.log(one_minus_beta_cos)
-        
-        part2 = 1/3 * np.exp(interp_ip(log_omega_mode2)) * \
-                (1 + cos_theta_list[:, np.newaxis])**2 / one_plus_beta_cos
-        part3 = 1/3 * np.exp(interp_ip(log_omega_mode3)) * \
-                (1 - cos_theta_list[:, np.newaxis])**2 / one_minus_beta_cos
-        
-        log_omega_mode4 = log_omega_tab - np.log(np.abs(beta_cos_theta))
-        zero_mask = cos_theta_list == 0
-        part4 = 2/3 * np.exp(interp_ip(log_omega_mode4[~zero_mask])) * \
-                (1 - cos_theta_list[~zero_mask, np.newaxis]**2) / np.abs(beta_cos_theta[~zero_mask])
-        aux[~zero_mask] = (part2[~zero_mask] + part3[~zero_mask] + part4) * omega_tab_4
-        aux[zero_mask] = (part2[zero_mask] + part3[zero_mask]) * omega_tab_4
 
-        return np.average(aux, axis=0, weights=cos_theta_weights[beta_ind]) + emiss_mode_1 # shape (N_freqs,)
-
-    result = parallel_map(emiss_beta, np.arange(len(beta_tab)))
-    return np.sum(np.array(result), axis=0)
-    
+def SED_imp(nu_tab, mu2_f_arr, beta_tab, angular_Omega_tab, cos_theta_list, cos_theta_weights,
+            *, isotropic=None):
+    """Compatibility entry point for the vectorized SED calculation."""
+    return SED(nu_tab, mu2_f_arr, beta_tab, angular_Omega_tab, cos_theta_list, cos_theta_weights,
+               isotropic=isotropic)

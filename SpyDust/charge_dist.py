@@ -638,7 +638,7 @@ def charge_dist_aux(Chi, nh, T, xh, xc, a, beta, a2=a2_default):
     if fneg[0] > 0:
         fneg = fpos[0] / fneg[0] * fneg
     else:
-        fpos = np.zeros(1)
+        fpos.fill(0.)
 
     norm = np.sum(fneg) + np.sum(fpos) - fpos[0]
 
@@ -648,33 +648,13 @@ def charge_dist_aux(Chi, nh, T, xh, xc, a, beta, a2=a2_default):
     Zneg = -np.arange(abs(Z_min) + 1)
     Zpos = np.arange(Z_max + 1)
 
-    # Keep only the values for which f_Z > fmin
-    ind_neg = np.where((fneg > 1e-10) & (Zneg != 0))
-    if len(ind_neg[0]) > 0:
-        fneg = fneg[ind_neg]
-        Zneg = Zneg[ind_neg]
-
-    ind_pos = np.where((fpos > 1e-10) | (Zpos == 0))
-    fpos = fpos[ind_pos]
-    Zpos = Zpos[ind_pos]
-
-    # Combine arrays
-    fZ = np.zeros((2, len(Zpos) + len(Zneg)))
-
-    fZ_array = fpos
-    Z_array = Zpos
-
-    if len(Zneg) > 0:
-        Z_array = np.concatenate((Z_array, Zneg))
-        fZ_array = np.concatenate((fZ_array, fneg))
-
-    # Renormalize
-    fZ_array /= np.sum(fZ_array)
-
-    fZ[0, :] = Z_array
-    fZ[1, :] = fZ_array
-
-    return fZ
+    # The neutral state belongs to the positive branch, even when all
+    # negative states fall below the truncation threshold.
+    negative = (Zneg != 0) & (fneg > 1e-10)
+    positive = (Zpos == 0) | (fpos > 1e-10)
+    charges = np.concatenate((Zpos[positive], Zneg[negative]))
+    probabilities = np.concatenate((fpos[positive], fneg[negative]))
+    return np.array([charges, probabilities / probabilities.sum()])
 
 def charge_dist(env, a, beta, a2=a2_default):
     Chi = env['Chi']

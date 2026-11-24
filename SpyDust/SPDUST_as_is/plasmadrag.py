@@ -2,6 +2,7 @@ import numpy as np
 from scipy.special import kv as beselk
 
 from .. import SpDust_data_dir
+from .._small_e import compute_small_e, small_e_tables as _small_e_tables, table_attribute as __getattr__
 from ..util import cgsconst, makelogtab, maketab, DX_over_X
 from .grain_properties import acx
 
@@ -15,11 +16,6 @@ mp = cgsconst.mp
 q = cgsconst.q
 pi = np.pi
 I = 1j  # complex number equivalent to IDL's "I = complex(0d, 1d)"
-
-class smalletabs:
-    smalle_tab = None
-    Gamma_tab = None
-    Gamma_max = None
 
 class plasma_tabs:
     Ipos_tab = None
@@ -47,76 +43,6 @@ class gp_arrays:
     gp_pos, gp_neg, gp_neutral = None, None, None
 
 
-def compute_small_e():
-    
-    # Create arrays
-    gamma_min = 1e-20
-    gamma_max = 10 ** 1.5
-    Ngamma = 300
-    Gamma_tab = makelogtab(gamma_min, gamma_max, Ngamma)
-    smalle_tab = np.zeros(Ngamma)  # Equivalent to dblarr in IDL
-    
-    # Parameters
-    Ny = 20000
-    ymed = 1.0
-    ymax = 1e20
-    
-    # Create u and Du arrays
-    u_part_1 = maketab(0, ymed, Ny)
-    u_part_2 = makelogtab(ymed, ymax, Ny)
-    u = np.exp(I * pi / 6) * np.concatenate((u_part_1, u_part_2))
-    
-    # Differential array Du
-    Du_part_1 = ymed / Ny + np.zeros(Ny)
-    Du_part_2 = DX_over_X(ymed, ymax, Ny) * u_part_2
-    Du = np.exp(I * pi / 6) * np.concatenate((Du_part_1, Du_part_2))
-    
-    # Function components
-    fcos = (u ** 2 - 1) / (u ** 2 + 1) ** 2
-    fsin = u / (u ** 2 + 1) ** 2
-    
-    # Main computation loop
-    """
-    for ig in range(Ngamma):
-        Gamma = Gamma_tab[ig]
-        time = Gamma * (u + u ** 3 / 3)
-        
-        # Integrals
-        intcos = 4 * np.sum(np.real(np.exp(I * time) * fcos * Du)) ** 2
-        intsin = 16 * np.sum(np.imag(np.exp(I * time) * fsin * Du)) ** 2
-        
-        # Store results in smalle_tab
-        smalle_tab[ig] = intcos + intsin    
-    """
-
-    # Define function for parallel computation
-    def compute_small_e_parallel(ig):
-        Gamma = Gamma_tab[ig]
-        time = Gamma * (u + u ** 3 / 3)
-        
-        # Integrals
-        intcos = 4 * np.sum(np.real(np.exp(I * time) * fcos * Du)) ** 2
-        intsin = 16 * np.sum(np.imag(np.exp(I * time) * fsin * Du)) ** 2
-        
-        return intcos + intsin
-    
-    # Parallel computation
-    smalle_tab = np.array(parallel_map(compute_small_e_parallel, list(range(Ngamma))))
-    
-    # Output the maximum gamma for debugging purposes
-    gamma_max = np.max(Gamma_tab)
-    
-    return Gamma_tab, smalle_tab, gamma_max
-
-# Call `compute_small_e` to get the values for small e_1, Zg < 0
-Gamma_tab, smalle_tab, Gamma_max = compute_small_e()
-smalletabs.Gamma_tab = Gamma_tab
-smalletabs.smalle_tab = smalle_tab
-smalletabs.Gamma_max = Gamma_max
-if rank0:
-    print("I(Zg<0, parabolic) stored")
-
-#@jit(nopython=True)
 def replace_zeros(Ipos_tab):
     """
     Replace zeros in a 2D array with a small value (1e-30), element by element.
@@ -132,17 +58,20 @@ def replace_zeros(Ipos_tab):
 def compute_int_plasma():
     file_path = os.path.join(SpDust_data_dir, 'int_plasma.npz')
     if os.path.exists(file_path):
-        data = np.load(file_path)
-        Ipos_tab = data['Ipos_tab']
-        Ineg_tab = data['Ineg_tab']
-        rot_tab = data['rot_tab']
-        e_1tab = data['e_1tab']
-        rot_min = data['rot_min']
-        rot_max = data['rot_max']
-        e_1min = data['e_1min']
-        e_1max = data['e_1max']
+        with np.load(file_path) as data:
+            Ipos_tab = data['Ipos_tab']
+            Ineg_tab = data['Ineg_tab']
+            rot_tab = data['rot_tab']
+            e_1tab = data['e_1tab']
+            rot_min = data['rot_min']
+            rot_max = data['rot_max']
+            e_1min = data['e_1min']
+            e_1max = data['e_1max']
         return Ipos_tab, Ineg_tab, rot_tab, e_1tab, rot_min, rot_max, e_1min, e_1max
     
+    tables = _small_e_tables()
+    Gamma_tab, smalle_tab, Gamma_max = tables.Gamma_tab, tables.smalle_tab, tables.Gamma_max
+
     # Create arrays
     e_1min = 1e-15
     e_1max = 1e4
@@ -292,6 +221,7 @@ def compute_int_plasma():
         np.savez(file_path, Ipos_tab=Ipos_tab, Ineg_tab=Ineg_tab, rot_tab=rot_tab, e_1tab=e_1tab,
              rot_min=rot_min, rot_max=rot_max, e_1min=e_1min, e_1max=e_1max)
 
+    barrier()
     return Ipos_tab, Ineg_tab, rot_tab, e_1tab, rot_min, rot_max, e_1min, e_1max
 
 
@@ -308,8 +238,6 @@ plasma_tabs.e_1min = e_1min
 plasma_tabs.e_1max = e_1max
 if rank0:
     print('I(rot, e, Zg <> 0) stored')
-
-barrier()
 
 def int_plasma(rot_new, e_1_new, Zg):
     """
@@ -484,8 +412,8 @@ def little_gp_neutral(phi, Omega):
         else:
             return 0.0
         
-    # Parallel computation
-    Int_c = np.array(parallel_map(compute_integral, list(range(Nu))))
+    # Each rank owns its phi from the outer table-building loop.
+    Int_c = np.array([compute_integral(i) for i in range(Nu)])
 
     # Final integral over u
     result = 2.0 * Du_over_u * np.sum(u_tab**2 * np.exp(-u_tab**2) * Int_c )
@@ -572,11 +500,11 @@ def compute_little_gp():
     gp_arrays.gp_pos = gp_pos
     gp_arrays.gp_neg = gp_neg
     gp_arrays.gp_neutral = gp_neutral
+    barrier()
 
     return 
 
 compute_little_gp()
-barrier()
 
 
 def little_gp_charged_interpol(psi_arr, Omega_arr):
@@ -661,7 +589,9 @@ def little_gp_charged_interpol(psi_arr, Omega_arr):
             )
         return result
     
-    gp_charged = np.array(parallel_map(loop_charged, list(range(Npsi_arr))))
+    # The enclosing spectrum calculation may assign a different grain to each rank.
+    for ipsi in range(Npsi_arr):
+        gp_charged[ipsi] = loop_charged(ipsi)
 
     return gp_charged
 
@@ -740,8 +670,9 @@ def Gp_sphere_per_mu2_averaged(env, a, fZ, omega):
 
     # Neutral grain contribution
     phi = np.sqrt(2 / (acx_val * k * T)) * q
-    little_gp_H = fZ[1, 0] * little_gp_neutral_interpol(phi, Omega_H)
-    little_gp_C = fZ[1, 0] * little_gp_neutral_interpol(phi, Omega_C)
+    f0 = fZ_arr[Zg_arr == 0].sum()
+    little_gp_H = f0 * little_gp_neutral_interpol(phi, Omega_H)
+    little_gp_C = f0 * little_gp_neutral_interpol(phi, Omega_C)
 
     # Charged grain contribution
     ind_charged = np.where(Zg_arr != 0)[0]
@@ -798,3 +729,7 @@ def FGp_averaged(env, a, fZ, omega, mu_ip, mu_op, tumbling=True):
 
     return {'Fp': Fp, 'Gp': Gp}
 
+# A wildcard import explicitly requests the historic small-e table attributes.
+__all__ = [name for name in globals() if not name.startswith('_')] + [
+    'Gamma_tab', 'smalle_tab', 'Gamma_max', 'smalletabs',
+]

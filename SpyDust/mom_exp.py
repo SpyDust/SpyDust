@@ -46,24 +46,34 @@ class MC_moment_expansion:
         beta_scale = max(5e-3, 5e-3 * abs(self.pivot_beta))
         return np.array([5e-3, beta_scale, 5e-3], dtype=float)
 
-    def _resolve_basis(self, freqs, basis, tumbling):
-        """Return a basis compatible with the requested frequencies."""
+    def _environment(self):
+        return dict(nh=self.nh, T=self.T, Chi=self.chi, xh=self.xh, y=self.y,
+                    gamma=0, dipole=9.3)
+
+    def _resolve_basis(self, freqs, basis, tumbling, order):
+        """An explicit basis selects its own physics. Otherwise reuse a compatible basis."""
         if basis is not None:
+            if freqs is not None and not np.array_equal(freqs, basis["freqs"]):
+                raise ValueError("freqs must match the supplied basis frequency grid.")
             return basis
-        regenerate = False
-        if self.last_basis is None:
-            regenerate = True
-        elif freqs is not None:
-            freq_vec = np.asarray(freqs, dtype=float)
-            if freq_vec.ndim != 1 or freq_vec.size == 0:
-                raise ValueError("freqs must be a non-empty one-dimensional array.")
-            if not np.array_equal(freq_vec, np.asarray(self.last_basis["freqs"], dtype=float)):
-                regenerate = True
-        if regenerate:
-            basis = self.generate_SED_basis(freqs=freqs, tumbling=tumbling)
-        else:
-            basis = self.last_basis
-        return basis
+
+        cached = self.last_basis
+        pivots = self.pivots
+        if cached is not None:
+            # An explicit grid/pivot used by generate_SED_basis stays active
+            # until the caller changes the corresponding instance default.
+            if freqs is None and np.array_equal(self.default_freqs, cached.get("default_freqs")):
+                freqs = cached["freqs"]
+            if np.array_equal(self.pivots, cached.get("default_pivots")):
+                pivots = cached["pivots"]
+            if (np.array_equal(freqs, cached["freqs"])
+                    and np.array_equal(pivots, cached["pivots"])
+                    and np.array_equal(self.step_sizes, cached["step_sizes"])
+                    and self._environment() == cached.get("environment")
+                    and bool(tumbling) == cached.get("tumbling")
+                    and cached["order"] >= order):
+                return cached
+        return self.generate_SED_basis(pivots=pivots, freqs=freqs, order=order, tumbling=tumbling)
 
     def _assemble_design_matrix(self, basis, max_order, include_zeroth):
         """Construct a design matrix up to max_order from the cached basis."""
@@ -136,16 +146,7 @@ class MC_moment_expansion:
             raise ValueError("Provided log parameters lead to non-finite grain properties.")
 
         a2_aux = 2.0 * a if tumbling else a / 2.0
-        env = {
-            'nh': self.nh,
-            'T': self.T,
-            'Chi': self.chi,
-            'xh': self.xh,
-            'xC': xC,
-            'y': self.y,
-            'gamma': 0,
-            'dipole': 9.3,
-        }
+        env = dict(self._environment(), xC=xC)
         freqs_native, sed_native = SpyDust_given_grain_size_shape(
             env,
             a,
@@ -225,9 +226,13 @@ class MC_moment_expansion:
             return sed_eval
 
         basis = {
-            "freqs": freq_grid,
+            "freqs": freq_grid.copy(),
             "zeroth": sed0,
-            "pivots": pivot_vec,
+            "pivots": pivot_vec.copy(),
+            "default_pivots": self.pivots.copy(),
+            "default_freqs": None if self.default_freqs is None else self.default_freqs.copy(),
+            "environment": self._environment(),
+            "tumbling": bool(tumbling),
             "step_sizes": step_sizes.copy(),
             "order": target_order,
         }
@@ -265,10 +270,15 @@ class MC_moment_expansion:
         return basis
 
     def evaluate_expansion(self, samples, basis=None, order=None):
+        """Evaluate a supplied basis or refresh the last basis for the current settings."""
         if basis is None:
             if self.last_basis is None:
                 raise ValueError("No cached basis available. Call generate_SED_basis first.")
-            basis = self.last_basis
+            # The original basis selects the orientation model and, by default,
+            # the derivative order. Explicit bases can still replay old models.
+            requested = self.last_basis["order"] if order is None else self._validate_order(order)
+            basis = self._resolve_basis(None, None, self.last_basis.get("tumbling", True),
+                                        min(self.order, requested))
 
         samples = np.asarray(samples, dtype=float)
         squeeze = False
@@ -319,12 +329,9 @@ class MC_moment_expansion:
         if target.ndim != 1 or target.size == 0:
             raise ValueError("target_sed must be a non-empty one-dimensional array.")
 
-        basis = self._resolve_basis(freqs, basis, tumbling)
-        if order is None:
-            resolved_order = min(self.order, basis["order"])
-        else:
-            resolved_order = self._validate_order(order)
-            resolved_order = min(resolved_order, self.order, basis["order"])
+        requested_order = self.order if order is None else min(self._validate_order(order), self.order)
+        basis = self._resolve_basis(freqs, basis, tumbling, requested_order)
+        resolved_order = min(requested_order, basis["order"])
 
         freqs_basis = np.asarray(basis["freqs"], dtype=float)
         if target.shape != freqs_basis.shape:
@@ -367,7 +374,7 @@ class MC_moment_expansion:
         if target.ndim != 1 or target.size == 0:
             raise ValueError("target_sed must be a non-empty one-dimensional array.")
 
-        basis = self._resolve_basis(freqs, basis, tumbling)
+        basis = self._resolve_basis(freqs, basis, tumbling, 1)
         if basis.get("order", 0) < 1 or "first" not in basis:
             raise ValueError("The provided basis does not contain first-order derivatives.")
 
